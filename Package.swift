@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "CameraModule",
     platforms: [
-        .iOS(.v15)
+        .iOS(.v12)
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
