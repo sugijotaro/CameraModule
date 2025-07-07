@@ -10,36 +10,85 @@ import CameraModule
 
 struct ContentView: View {
     @State private var capturedImage: UIImage?
-    @State private var isShowingCamera = false
+    @State private var isShowingCameraModuleView = false
+    @State private var isShowingCustomCameraView = false
     
     var body: some View {
-        VStack {
-            if let image = capturedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                
-                Button("Retake Photo") {
-                    capturedImage = nil
-                    isShowingCamera = true
+        NavigationView {
+            VStack(spacing: 20) {
+                if let image = capturedImage {
+                    Spacer()
+                    Text("Captured Image")
+                        .font(.headline)
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(radius: 5)
+                        .padding()
+                    
+                    Button {
+                        capturedImage = nil
+                    } label: {
+                        Label("Take Another Photo", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.secondary)
+                    Spacer()
+                    
+                } else {
+                    Spacer()
+                    
+                    VStack(spacing: 12) {
+                        Image(systemName: "camera.on.rectangle")
+                            .font(.system(size: 60))
+                            .foregroundColor(.accentColor)
+                        Text("Camera Demo App")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                        Text("Choose a camera style to take a photo.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(spacing: 15) {
+                        Button {
+                            isShowingCameraModuleView = true
+                        } label: {
+                            Label("Default Fullscreen Camera", systemImage: "camera.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        
+                        Button {
+                            isShowingCustomCameraView = true
+                        } label: {
+                            Label("Custom UI Camera", systemImage: "camera.viewfinder")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                    }
+                    .padding()
                 }
-                .padding()
-            } else {
-                Text("Take a photo with the camera")
-                Button("Open Camera") {
-                    isShowingCamera = true
-                }
-                .padding()
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(10)
             }
-        }
-        .fullScreenCover(isPresented: $isShowingCamera) {
-            CameraView { image in
-                self.capturedImage = image
-                self.isShowingCamera = false
+            .navigationBarHidden(true)
+            .fullScreenCover(isPresented: $isShowingCameraModuleView) {
+                CameraView { image in
+                    self.capturedImage = image
+                    self.isShowingCameraModuleView = false
+                }
+            }
+            .fullScreenCover(isPresented: $isShowingCustomCameraView) {
+                CustomCameraView { image in
+                    self.capturedImage = image
+                    self.isShowingCustomCameraView = false
+                }
             }
         }
     }

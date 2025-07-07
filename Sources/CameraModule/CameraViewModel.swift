@@ -42,10 +42,11 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             
+            let session = self.session ?? AVCaptureSession()
+            
             if let existingSession = self.session {
                 existingSession.stopRunning()
                 existingSession.inputs.forEach { existingSession.removeInput($0) }
-                existingSession.outputs.forEach { existingSession.removeOutput($0) }
             }
             
             let deviceTypes: [AVCaptureDevice.DeviceType]
@@ -76,7 +77,6 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 self.wideAngleZoomFactor = 2.0
             }
             
-            let session = self.session ?? AVCaptureSession()
             session.sessionPreset = .photo
             
             if session.canAddInput(deviceInput) {
@@ -84,8 +84,16 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
             }
             
             let photoOutput = self.photoOutput ?? AVCapturePhotoOutput()
-            if session.canAddOutput(photoOutput) && session.outputs.isEmpty {
-                session.addOutput(photoOutput)
+            if session.canAddOutput(photoOutput) {
+                if !session.outputs.contains(where: { $0 === photoOutput }) {
+                    session.addOutput(photoOutput)
+                }
+                
+                if #available(iOS 16.0, *) {
+                    if let maxDimensions = device.activeFormat.supportedMaxPhotoDimensions.max(by: { $0.width < $1.width }) {
+                        photoOutput.maxPhotoDimensions = maxDimensions
+                    }
+                }
             }
             
             self.setInitialZoom()
@@ -182,12 +190,6 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
             if self.cameraPosition == .front {
                 if let connection = photoOutput.connection(with: .video) {
                     connection.isVideoMirrored = true
-                }
-            }
-            
-            if #available(iOS 16.0, *) {
-                if let maxDimensions = device.activeFormat.supportedMaxPhotoDimensions.max(by: { $0.width < $1.width }) {
-                    settings.maxPhotoDimensions = maxDimensions
                 }
             }
             
