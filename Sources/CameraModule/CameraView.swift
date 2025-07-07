@@ -1,5 +1,5 @@
 //
-//  CaptureCameraView.swift
+//  CameraView.swift
 //  CameraModule
 //
 //  Created by Jotaro Sugiyama on 2025/07/07.
