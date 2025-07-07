@@ -18,6 +18,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     private let sessionQueue = DispatchQueue(label: "com.CameraModule.sessionQueue")
     
     private var cameraPosition: AVCaptureDevice.Position = .back
+    private var activeDevice: AVCaptureDevice?
     
     @MainActor
     public override init() {
@@ -45,7 +46,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
             }
             
             let deviceDiscoverySession = AVCaptureDevice.DiscoverySession(
-                deviceTypes: [.builtInWideAngleCamera, .builtInDualCamera],
+                deviceTypes: [.builtInWideAngleCamera, .builtInDualCamera, .builtInTelephotoCamera],
                 mediaType: .video,
                 position: position
             )
@@ -53,11 +54,11 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
             guard let device = deviceDiscoverySession.devices.first,
                   let deviceInput = try? AVCaptureDeviceInput(device: device) else {
                 print("Camera Error: Could not find or create device input for position \(position).")
-                if position != .back {
-                    self.setupCamera(position: .back)
-                }
+                if position != .back { self.setupCamera(position: .back) }
                 return
             }
+            
+            self.activeDevice = device
             
             let session = self.session ?? AVCaptureSession()
             session.sessionPreset = .photo
@@ -78,7 +79,6 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                     let videoPreviewLayer = AVCaptureVideoPreviewLayer(session: session)
                     videoPreviewLayer.videoGravity = .resizeAspectFill
                     videoPreviewLayer.frame = self.previewView.bounds
-                    
                     self.previewView.layer.sublayers?.forEach { $0.removeFromSuperlayer() }
                     self.previewView.layer.addSublayer(videoPreviewLayer)
                 }
@@ -90,6 +90,19 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
             
             self.session = session
             self.photoOutput = photoOutput
+        }
+    }
+    
+    public func zoom(factor: CGFloat) {
+        sessionQueue.async { [weak self] in
+            guard let self = self, let device = self.activeDevice else { return }
+            do {
+                try device.lockForConfiguration()
+                device.videoZoomFactor = max(1.0, min(factor, device.maxAvailableVideoZoomFactor))
+                device.unlockForConfiguration()
+            } catch {
+                print("Could not lock device for configuration: \(error)")
+            }
         }
     }
     

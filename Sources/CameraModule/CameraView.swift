@@ -11,6 +11,8 @@ public struct CameraView: View {
     @StateObject private var viewModel = CameraViewModel()
     private var onImageCaptured: (UIImage) -> Void
     
+    @State private var currentZoomFactor: CGFloat = 1.0
+    
     public init(onImageCaptured: @escaping (UIImage) -> Void) {
         self.onImageCaptured = onImageCaptured
     }
@@ -18,6 +20,18 @@ public struct CameraView: View {
     public var body: some View {
         ZStack {
             CameraPreview(viewModel: viewModel)
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { value in
+                            let delta = value - 1.0
+                            let newZoomFactor = currentZoomFactor + delta
+                            viewModel.zoom(factor: newZoomFactor)
+                        }
+                        .onEnded { value in
+                            let newZoomFactor = currentZoomFactor + (value - 1.0)
+                            currentZoomFactor = newZoomFactor
+                        }
+                )
                 .ignoresSafeArea()
             
             VStack {
@@ -38,6 +52,8 @@ public struct CameraView: View {
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .trailing) {
                     Button(action: {
+                        currentZoomFactor = 1.0
+                        viewModel.zoom(factor: 1.0)
                         viewModel.switchCamera()
                     }) {
                         Image(systemName: "arrow.triangle.2.circlepath.camera")
