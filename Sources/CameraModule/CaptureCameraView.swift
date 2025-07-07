@@ -44,7 +44,7 @@ public struct CameraView: View {
         .onDisappear {
             viewModel.stopSession()
         }
-        .onChange(of: viewModel.capturedImage) { oldImage, newImage in
+        .onChange(of: viewModel.capturedImage) { newImage in
             if let image = newImage {
                 onImageCaptured(image)
             }

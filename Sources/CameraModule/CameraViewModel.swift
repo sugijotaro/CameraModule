@@ -5,72 +5,76 @@
 //  Created by Jotaro Sugiyama on 2025/07/07.
 //
 
-import AVFoundation
+@preconcurrency import AVFoundation
 import UIKit
 
-public class CameraViewModel: NSObject, ObservableObject {
+public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     @Published public private(set) var capturedImage: UIImage?
     
-    // このViewはパッケージ内部でのみ使用
-    var previewView: UIView = UIView()
+    var previewView: UIView
     
     private var session: AVCaptureSession?
     private var photoOutput: AVCapturePhotoOutput?
+    private let sessionQueue = DispatchQueue(label: "com.CameraModule.sessionQueue")
     
+    @MainActor
     public override init() {
+        self.previewView = UIView()
         super.init()
     }
     
     public func setupCamera() {
-        guard session == nil else { return }
-        
-        guard let device = AVCaptureDevice.default(.builtInWideCamera, for: .video, position: .back) ?? AVCaptureDevice.default(.builtInDualWideCamera, for: .video, position: .back),
-              let deviceInput = try? AVCaptureDeviceInput(device: device) else {
-            print("Camera Error: Could not create device input.")
-            return
-        }
-        
-        let session = AVCaptureSession()
-        session.sessionPreset = .photo
-        
-        if session.canAddInput(deviceInput) {
-            session.addInput(deviceInput)
-        }
-        
-        let photoOutput = AVCapturePhotoOutput()
-        if session.canAddOutput(photoOutput) {
-            session.addOutput(photoOutput)
-        }
-        
-        let videoPreviewLayer = AVCaptureVideoPreviewLayer(session: session)
-        videoPreviewLayer.videoGravity = .resizeAspectFill
-        videoPreviewLayer.frame = previewView.bounds
-        
-        // 既存のレイヤーをクリアして追加
-        DispatchQueue.main.async {
-            self.previewView.layer.sublayers?.forEach { $0.removeFromSuperlayer() }
-            self.previewView.layer.addSublayer(videoPreviewLayer)
-        }
-        
-        DispatchQueue.global(qos: .userInitiated).async {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            guard self.session == nil else { return }
+            
+            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) ?? AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .back),
+                  let deviceInput = try? AVCaptureDeviceInput(device: device) else {
+                print("Camera Error: Could not create device input.")
+                return
+            }
+            
+            let session = AVCaptureSession()
+            session.sessionPreset = .photo
+            
+            if session.canAddInput(deviceInput) {
+                session.addInput(deviceInput)
+            }
+            
+            let photoOutput = AVCapturePhotoOutput()
+            if session.canAddOutput(photoOutput) {
+                session.addOutput(photoOutput)
+            }
+            
+            DispatchQueue.main.async {
+                let videoPreviewLayer = AVCaptureVideoPreviewLayer(session: session)
+                videoPreviewLayer.videoGravity = .resizeAspectFill
+                videoPreviewLayer.frame = self.previewView.bounds
+                
+                self.previewView.layer.sublayers?.forEach { $0.removeFromSuperlayer() }
+                self.previewView.layer.addSublayer(videoPreviewLayer)
+            }
+            
             session.startRunning()
+            
+            self.session = session
+            self.photoOutput = photoOutput
         }
-        
-        self.session = session
-        self.photoOutput = photoOutput
     }
     
     public func capturePhoto() {
-        guard let photoOutput = self.photoOutput else { return }
-        let settings = AVCapturePhotoSettings()
-        photoOutput.capturePhoto(with: settings, delegate: self)
+        sessionQueue.async { [weak self] in
+            guard let self = self, let photoOutput = self.photoOutput else { return }
+            let settings = AVCapturePhotoSettings()
+            photoOutput.capturePhoto(with: settings, delegate: self)
+        }
     }
     
     public func stopSession() {
-        if let session = self.session, session.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async {
-                session.stopRunning()
-            }
+        sessionQueue.async { [weak self] in
+            guard let self = self, let session = self.session, session.isRunning else { return }
+            session.stopRunning()
         }
     }
 }
