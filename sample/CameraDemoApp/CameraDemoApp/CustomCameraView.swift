@@ -24,8 +24,11 @@ struct CustomCameraView: View {
                 VStack(spacing: 0) {
                     Spacer()
                     
-                    let previewWidth = geometry.size.width - 40
-                    let previewHeight = previewWidth * 4 / 3
+                    let rawWidth = geometry.size.width - 40
+                    let previewWidth = max(rawWidth.isFinite ? rawWidth : 0, 0)
+                    let previewHeight = previewWidth > 0
+                        ? (previewWidth * 4 / 3)
+                        : 0
                     
                     CameraPreview(viewModel: viewModel)
                         .frame(width: previewWidth, height: previewHeight)
@@ -66,8 +69,7 @@ struct CustomCameraView: View {
                         
                         Spacer()
                         
-                        Color.clear.frame(width: 24 + 32, height: 24 + 32)
-                        
+                        Color.clear.frame(width: 56, height: 56)
                     }
                     .padding(.horizontal, 30)
                     .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 30 : 50)
