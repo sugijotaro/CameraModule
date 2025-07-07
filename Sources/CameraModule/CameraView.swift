@@ -11,7 +11,7 @@ public struct CameraView: View {
     @StateObject private var viewModel = CameraViewModel()
     private var onImageCaptured: (UIImage) -> Void
     
-    @State private var currentZoomFactor: CGFloat = 1.0
+    @State private var gestureZoomFactor: CGFloat = 1.0
     
     public init(onImageCaptured: @escaping (UIImage) -> Void) {
         self.onImageCaptured = onImageCaptured
@@ -23,18 +23,30 @@ public struct CameraView: View {
                 .gesture(
                     MagnificationGesture()
                         .onChanged { value in
-                            let delta = value - 1.0
-                            let newZoomFactor = currentZoomFactor + delta
-                            viewModel.zoom(factor: newZoomFactor)
+                            let newFactor = gestureZoomFactor * value
+                            viewModel.zoom(factor: newFactor)
                         }
                         .onEnded { value in
-                            let newZoomFactor = currentZoomFactor + (value - 1.0)
-                            currentZoomFactor = newZoomFactor
+                            gestureZoomFactor *= value
                         }
                 )
                 .ignoresSafeArea()
             
             VStack {
+                Button(action: {
+                    viewModel.toggleZoom(to: 0.5)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        self.gestureZoomFactor = viewModel.currentZoomFactorForDisplay * 2.0
+                    }
+                }) {
+                    Text("\(viewModel.currentZoomFactorForDisplay, specifier: "%.1f")x")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(Color.black.opacity(0.5))
+                        .clipShape(Capsule())
+                }
                 HStack {
                     ZStack {
                         Button(action: {
@@ -52,9 +64,8 @@ public struct CameraView: View {
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .trailing) {
                     Button(action: {
-                        currentZoomFactor = 1.0
-                        viewModel.zoom(factor: 1.0)
                         viewModel.switchCamera()
+                        self.gestureZoomFactor = 2.0
                     }) {
                         Image(systemName: "arrow.triangle.2.circlepath.camera")
                             .font(.system(size: 20))
