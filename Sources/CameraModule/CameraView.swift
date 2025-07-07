@@ -21,22 +21,37 @@ public struct CameraView: View {
                 .ignoresSafeArea()
             
             VStack {
-                Spacer()
-                
-                Button(action: {
-                    viewModel.capturePhoto()
-                }) {
+                HStack {
                     ZStack {
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: 70, height: 70)
+                        Button(action: {
+                            viewModel.capturePhoto()
+                        }) {
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 70, height: 70)
+                        }
                         Circle()
                             .stroke(Color.white, lineWidth: 4)
                             .frame(width: 80, height: 80)
                     }
                 }
-                .padding(.bottom, 30)
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .trailing) {
+                    Button(action: {
+                        viewModel.switchCamera()
+                    }) {
+                        Image(systemName: "arrow.triangle.2.circlepath.camera")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.black.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                    .padding(.trailing, 20)
+                }
             }
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .padding(.bottom, 30)
         }
         .onAppear {
             viewModel.setupCamera()
