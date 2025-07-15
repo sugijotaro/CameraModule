@@ -11,6 +11,7 @@ import UIKit
 public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     @Published public private(set) var capturedImage: UIImage?
     @Published public private(set) var currentZoomFactorForDisplay: CGFloat = 1.0
+    @Published public private(set) var cameraPermissionStatus: AVAuthorizationStatus = .notDetermined
     
     var previewView: UIView
     
@@ -30,7 +31,32 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     public func setupCamera() {
-        setupCamera(position: .back)
+        checkCameraPermission { [weak self] granted in
+            if granted {
+                self?.setupCamera(position: .back)
+            }
+        }
+    }
+    
+    private func checkCameraPermission(completion: @escaping (Bool) -> Void) {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        DispatchQueue.main.async { [weak self] in
+            self?.cameraPermissionStatus = status
+        }
+        
+        switch status {
+        case .authorized:
+            completion(true)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async { [weak self] in
+                    self?.cameraPermissionStatus = granted ? .authorized : .denied
+                }
+                completion(granted)
+            }
+        default:
+            completion(false)
+        }
     }
     
     public func switchCamera() {
