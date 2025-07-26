@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var capturedImage: UIImage?
     @State private var capturedVideoURL: URL?
     @State private var isShowingCameraModuleView = false
+    @State private var isShowingPhotoVideoView = false
     @State private var isShowingCustomCameraView = false
     
     var body: some View {
@@ -60,7 +61,16 @@ struct ContentView: View {
                         Button {
                             isShowingCameraModuleView = true
                         } label: {
-                            Label("Default Fullscreen Camera", systemImage: "camera.fill")
+                            Label("Photo Only Camera", systemImage: "camera.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        
+                        Button {
+                            isShowingPhotoVideoView = true
+                        } label: {
+                            Label("Photo & Video Camera", systemImage: "video.fill")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
@@ -85,6 +95,20 @@ struct ContentView: View {
                     onImageCaptured: { image in
                         self.capturedImage = image
                         self.isShowingCameraModuleView = false
+                    }
+                )
+            }
+            .fullScreenCover(isPresented: $isShowingPhotoVideoView) {
+                CameraView(
+                    cameraMode: .photoAndVideo,
+                    onImageCaptured: { image in
+                        self.capturedImage = image
+                        self.isShowingPhotoVideoView = false
+                    },
+                    onVideoCaptured: { videoURL in
+                        self.capturedVideoURL = videoURL
+                        self.isShowingPhotoVideoView = false
+                        print("Video saved at: \(videoURL)")
                     }
                 )
             }
