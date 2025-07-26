@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CameraModule
+import AVKit
 
 struct ContentView: View {
     @State private var capturedImage: UIImage?
@@ -36,6 +37,27 @@ struct ContentView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(.secondary)
+                    Spacer()
+                    
+                } else if let videoURL = capturedVideoURL {
+                    Spacer()
+                    Text("Captured Video")
+                        .font(.headline)
+                    VideoPlayer(player: AVPlayer(url: videoURL))
+                        .frame(height: 400)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(radius: 5)
+                        .padding()
+                    
+                    HStack(spacing: 20) {
+                        Button {
+                            capturedVideoURL = nil
+                        } label: {
+                            Label("Record Another", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.secondary)
+                    }
                     Spacer()
                     
                 } else {
@@ -103,10 +125,12 @@ struct ContentView: View {
                     cameraMode: .photoAndVideo,
                     onImageCaptured: { image in
                         self.capturedImage = image
+                        self.capturedVideoURL = nil
                         self.isShowingPhotoVideoView = false
                     },
                     onVideoCaptured: { videoURL in
                         self.capturedVideoURL = videoURL
+                        self.capturedImage = nil
                         self.isShowingPhotoVideoView = false
                         print("Video saved at: \(videoURL)")
                     }
