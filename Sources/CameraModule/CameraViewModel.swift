@@ -11,6 +11,7 @@ import UIKit
 public enum CameraMode {
     case photoOnly
     case photoAndVideo
+    case seamless
 }
 
 public enum CaptureMode: String, CaseIterable {
@@ -64,7 +65,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         
         switch status {
         case .authorized:
-            if cameraMode == .photoAndVideo {
+            if cameraMode == .photoAndVideo || cameraMode == .seamless {
                 checkMicrophonePermission(completion: completion)
             } else {
                 completion(true)
@@ -74,7 +75,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 Task { @MainActor [weak self] in
                     self?.cameraPermissionStatus = granted ? .authorized : .denied
                     if granted {
-                        if self?.cameraMode == .photoAndVideo {
+                        if self?.cameraMode == .photoAndVideo || self?.cameraMode == .seamless {
                             self?.checkMicrophonePermission(completion: completion)
                         } else {
                             completion(true)
@@ -154,7 +155,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 session.addInput(deviceInput)
             }
             
-            if cameraMode == .photoAndVideo {
+            if cameraMode == .photoAndVideo || cameraMode == .seamless {
                 if let audioDevice = AVCaptureDevice.default(for: .audio),
                    let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
                    session.canAddInput(audioInput) {
@@ -175,7 +176,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 }
             }
             
-            if cameraMode == .photoAndVideo {
+            if cameraMode == .photoAndVideo || cameraMode == .seamless {
                 let movieOutput = self.movieOutput ?? AVCaptureMovieFileOutput()
                 if session.canAddOutput(movieOutput) {
                     if !session.outputs.contains(where: { $0 === movieOutput }) {
@@ -209,7 +210,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     public func startRecording() {
-        guard cameraMode == .photoAndVideo else { return }
+        guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
         
         sessionQueue.async { [weak self] in
             guard let self = self,
@@ -233,7 +234,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     public func stopRecording() {
-        guard cameraMode == .photoAndVideo else { return }
+        guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
         
         sessionQueue.async { [weak self] in
             guard let self = self,

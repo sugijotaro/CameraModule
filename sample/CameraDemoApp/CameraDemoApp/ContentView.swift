@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var capturedVideoURL: URL?
     @State private var isShowingCameraModuleView = false
     @State private var isShowingPhotoVideoView = false
+    @State private var isShowingSeamlessView = false
     @State private var isShowingCustomCameraView = false
     
     var body: some View {
@@ -99,6 +100,15 @@ struct ContentView: View {
                         .controlSize(.large)
                         
                         Button {
+                            isShowingSeamlessView = true
+                        } label: {
+                            Label("Seamless Camera", systemImage: "camera.aperture")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        
+                        Button {
                             isShowingCustomCameraView = true
                         } label: {
                             Label("Custom UI Camera", systemImage: "camera.viewfinder")
@@ -132,6 +142,22 @@ struct ContentView: View {
                         self.capturedVideoURL = videoURL
                         self.capturedImage = nil
                         self.isShowingPhotoVideoView = false
+                        print("Video saved at: \(videoURL)")
+                    }
+                )
+            }
+            .fullScreenCover(isPresented: $isShowingSeamlessView) {
+                CameraView(
+                    cameraMode: .seamless,
+                    onImageCaptured: { image in
+                        self.capturedImage = image
+                        self.capturedVideoURL = nil
+                        self.isShowingSeamlessView = false
+                    },
+                    onVideoCaptured: { videoURL in
+                        self.capturedVideoURL = videoURL
+                        self.capturedImage = nil
+                        self.isShowingSeamlessView = false
                         print("Video saved at: \(videoURL)")
                     }
                 )

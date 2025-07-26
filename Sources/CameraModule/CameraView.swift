@@ -67,7 +67,36 @@ public struct CameraView: View {
                 }
                 
                 HStack {
-                    if viewModel.captureMode == .photo {
+                    if viewModel.cameraMode == .seamless {
+                        // Seamless capture button (tap for photo, hold for video)
+                        ZStack {
+                            Circle()
+                                .fill(viewModel.isRecording ? Color.red : Color.white)
+                                .frame(width: 70, height: 70)
+                                .scaleEffect(viewModel.isRecording ? 0.8 : 1.0)
+                                .animation(.easeInOut(duration: 0.2), value: viewModel.isRecording)
+                                .onTapGesture {
+                                    if !viewModel.isRecording {
+                                        viewModel.capturePhoto()
+                                    }
+                                }
+                                .onLongPressGesture(
+                                    minimumDuration: 0.5,
+                                    maximumDistance: .infinity,
+                                    pressing: { isPressing in
+                                        if isPressing && !viewModel.isRecording {
+                                            viewModel.startRecording()
+                                        } else if !isPressing && viewModel.isRecording {
+                                            viewModel.stopRecording()
+                                        }
+                                    },
+                                    perform: { }
+                                )
+                            Circle()
+                                .stroke(Color.white, lineWidth: 4)
+                                .frame(width: 80, height: 80)
+                        }
+                    } else if viewModel.captureMode == .photo {
                         ZStack {
                             Button(action: {
                                 viewModel.capturePhoto()
