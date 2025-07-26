@@ -117,18 +117,20 @@ public struct CameraView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .trailing) {
-                    Button(action: {
-                        viewModel.switchCamera()
-                        self.gestureZoomFactor = 2.0
-                    }) {
-                        Image(systemName: "arrow.triangle.2.circlepath.camera")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
+                    if !viewModel.isRecording {
+                        Button(action: {
+                            viewModel.switchCamera()
+                            self.gestureZoomFactor = 2.0
+                        }) {
+                            Image(systemName: "arrow.triangle.2.circlepath.camera")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(Circle())
+                        }
+                        .padding(.trailing, 20)
                     }
-                    .padding(.trailing, 20)
                 }
             }
             .frame(maxHeight: .infinity, alignment: .bottom)
