@@ -67,34 +67,52 @@ public struct CameraView: View {
                 }
                 
                 HStack {
-                    ZStack {
-                        Button(action: {
-                            if viewModel.isRecording {
-                                viewModel.stopRecording()
-                            } else if viewModel.captureMode == .photo {
+                    if viewModel.captureMode == .photo {
+                        ZStack {
+                            Button(action: {
                                 viewModel.capturePhoto()
-                            } else if viewModel.cameraMode == .photoAndVideo {
-                                viewModel.startRecording()
-                            }
-                        }) {
-                            if viewModel.captureMode == .video && !viewModel.isRecording {
+                            }) {
                                 Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 70, height: 70)
+                            }
+                            Circle()
+                                .stroke(Color.white, lineWidth: 4)
+                                .frame(width: 80, height: 80)
+                        }
+                    } else {
+                        ZStack {
+                            Button(action: {
+                                if viewModel.isRecording {
+                                    viewModel.stopRecording()
+                                } else {
+                                    viewModel.startRecording()
+                                }
+                            }) {
+                                if viewModel.isRecording {
+                                    ZStack {
+                                        Circle()
+                                            .fill(.clear)
+                                            .frame(width: 70, height: 70)
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color.red)
+                                            .frame(width: 35, height: 35)
+                                    }
+                                } else {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 70, height: 70)
+                                }
+                            }
+                            if viewModel.isRecording {
+                                RoundedRectangle(cornerRadius: 8)
                                     .fill(Color.red)
-                                    .frame(width: 70, height: 70)
-                            } else {
-                                Circle()
-                                    .fill(viewModel.isRecording ? Color.red : Color.white)
-                                    .frame(width: 70, height: 70)
+                                    .frame(width: 35, height: 35)
                             }
+                            Circle()
+                                .stroke(Color.white, lineWidth: 4)
+                                .frame(width: 80, height: 80)
                         }
-                        if viewModel.captureMode == .video && viewModel.isRecording {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.red)
-                                .frame(width: 35, height: 35)
-                        }
-                        Circle()
-                            .stroke(Color.white, lineWidth: 4)
-                            .frame(width: 80, height: 80)
                     }
                 }
                 .frame(maxWidth: .infinity)
