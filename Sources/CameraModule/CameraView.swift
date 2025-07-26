@@ -8,13 +8,18 @@
 import SwiftUI
 
 public struct CameraView: View {
-    @StateObject private var viewModel = CameraViewModel()
+    @StateObject private var viewModel: CameraViewModel
     private var onImageCaptured: (UIImage) -> Void
     private var onVideoCaptured: ((URL) -> Void)?
     
     @State private var gestureZoomFactor: CGFloat = 1.0
     
-    public init(onImageCaptured: @escaping (UIImage) -> Void, onVideoCaptured: ((URL) -> Void)? = nil) {
+    public init(
+        cameraMode: CameraMode = .photoOnly,
+        onImageCaptured: @escaping (UIImage) -> Void,
+        onVideoCaptured: ((URL) -> Void)? = nil
+    ) {
+        self._viewModel = StateObject(wrappedValue: CameraViewModel(cameraMode: cameraMode))
         self.onImageCaptured = onImageCaptured
         self.onVideoCaptured = onVideoCaptured
     }
@@ -49,21 +54,43 @@ public struct CameraView: View {
                         .background(Color.black.opacity(0.5))
                         .clipShape(Capsule())
                 }
+                
+                if viewModel.cameraMode == .photoAndVideo {
+                    Picker("Mode", selection: $viewModel.captureMode) {
+                        ForEach(CaptureMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 150)
+                    .padding(.bottom, 20)
+                }
+                
                 HStack {
                     ZStack {
                         Button(action: {
                             if viewModel.isRecording {
                                 viewModel.stopRecording()
-                            } else {
+                            } else if viewModel.captureMode == .photo {
                                 viewModel.capturePhoto()
+                            } else if viewModel.cameraMode == .photoAndVideo {
+                                viewModel.startRecording()
                             }
                         }) {
-                            Circle()
-                                .fill(viewModel.isRecording ? Color.red : Color.white)
-                                .frame(width: 70, height: 70)
+                            if viewModel.captureMode == .video && !viewModel.isRecording {
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 70, height: 70)
+                            } else {
+                                Circle()
+                                    .fill(viewModel.isRecording ? Color.red : Color.white)
+                                    .frame(width: 70, height: 70)
+                            }
                         }
-                        .onLongPressGesture(minimumDuration: 0.5) {
-                            viewModel.startRecording()
+                        if viewModel.captureMode == .video && viewModel.isRecording {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.red)
+                                .frame(width: 35, height: 35)
                         }
                         Circle()
                             .stroke(Color.white, lineWidth: 4)

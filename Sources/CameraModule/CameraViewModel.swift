@@ -8,14 +8,26 @@
 @preconcurrency import AVFoundation
 import UIKit
 
+public enum CameraMode {
+    case photoOnly
+    case photoAndVideo
+}
+
+public enum CaptureMode: String, CaseIterable {
+    case photo = "Photo"
+    case video = "Video"
+}
+
 public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     @Published public private(set) var capturedImage: UIImage?
     @Published public private(set) var currentZoomFactorForDisplay: CGFloat = 1.0
     @Published public private(set) var cameraPermissionStatus: AVAuthorizationStatus = .notDetermined
     @Published public private(set) var isRecording: Bool = false
     @Published public private(set) var recordedVideoURL: URL?
+    @Published public var captureMode: CaptureMode = .photo
     
     var previewView: UIView
+    let cameraMode: CameraMode
     
     private var session: AVCaptureSession?
     private var photoOutput: AVCapturePhotoOutput?
@@ -28,8 +40,9 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     private var wideAngleZoomFactor: CGFloat = 2.0
     
     @MainActor
-    public override init() {
+    public init(cameraMode: CameraMode = .photoOnly) {
         self.previewView = UIView()
+        self.cameraMode = cameraMode
         super.init()
     }
     
@@ -51,13 +64,21 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         
         switch status {
         case .authorized:
-            checkMicrophonePermission(completion: completion)
+            if cameraMode == .photoAndVideo {
+                checkMicrophonePermission(completion: completion)
+            } else {
+                completion(true)
+            }
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
                 Task { @MainActor [weak self] in
                     self?.cameraPermissionStatus = granted ? .authorized : .denied
                     if granted {
-                        self?.checkMicrophonePermission(completion: completion)
+                        if self?.cameraMode == .photoAndVideo {
+                            self?.checkMicrophonePermission(completion: completion)
+                        } else {
+                            completion(true)
+                        }
                     } else {
                         completion(false)
                     }
@@ -133,10 +154,12 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 session.addInput(deviceInput)
             }
             
-            if let audioDevice = AVCaptureDevice.default(for: .audio),
-               let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
-               session.canAddInput(audioInput) {
-                session.addInput(audioInput)
+            if cameraMode == .photoAndVideo {
+                if let audioDevice = AVCaptureDevice.default(for: .audio),
+                   let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+                   session.canAddInput(audioInput) {
+                    session.addInput(audioInput)
+                }
             }
             
             let photoOutput = self.photoOutput ?? AVCapturePhotoOutput()
@@ -152,13 +175,15 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 }
             }
             
-            let movieOutput = self.movieOutput ?? AVCaptureMovieFileOutput()
-            if session.canAddOutput(movieOutput) {
-                if !session.outputs.contains(where: { $0 === movieOutput }) {
-                    session.addOutput(movieOutput)
+            if cameraMode == .photoAndVideo {
+                let movieOutput = self.movieOutput ?? AVCaptureMovieFileOutput()
+                if session.canAddOutput(movieOutput) {
+                    if !session.outputs.contains(where: { $0 === movieOutput }) {
+                        session.addOutput(movieOutput)
+                    }
                 }
+                self.movieOutput = movieOutput
             }
-            self.movieOutput = movieOutput
             
             self.setInitialZoom()
             
@@ -184,6 +209,8 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     public func startRecording() {
+        guard cameraMode == .photoAndVideo else { return }
+        
         sessionQueue.async { [weak self] in
             guard let self = self,
                   let movieOutput = self.movieOutput,
@@ -206,6 +233,8 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     public func stopRecording() {
+        guard cameraMode == .photoAndVideo else { return }
+        
         sessionQueue.async { [weak self] in
             guard let self = self,
                   let movieOutput = self.movieOutput,

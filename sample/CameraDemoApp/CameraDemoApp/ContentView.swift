@@ -81,14 +81,10 @@ struct ContentView: View {
             .navigationBarHidden(true)
             .fullScreenCover(isPresented: $isShowingCameraModuleView) {
                 CameraView(
+                    cameraMode: .photoOnly,
                     onImageCaptured: { image in
                         self.capturedImage = image
                         self.isShowingCameraModuleView = false
-                    },
-                    onVideoCaptured: { videoURL in
-                        self.capturedVideoURL = videoURL
-                        self.isShowingCameraModuleView = false
-                        print("Video saved at: \(videoURL)")
                     }
                 )
             }
