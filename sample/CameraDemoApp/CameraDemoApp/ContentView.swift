@@ -10,6 +10,7 @@ import CameraModule
 
 struct ContentView: View {
     @State private var capturedImage: UIImage?
+    @State private var capturedVideoURL: URL?
     @State private var isShowingCameraModuleView = false
     @State private var isShowingCustomCameraView = false
     
@@ -79,10 +80,17 @@ struct ContentView: View {
             }
             .navigationBarHidden(true)
             .fullScreenCover(isPresented: $isShowingCameraModuleView) {
-                CameraView { image in
-                    self.capturedImage = image
-                    self.isShowingCameraModuleView = false
-                }
+                CameraView(
+                    onImageCaptured: { image in
+                        self.capturedImage = image
+                        self.isShowingCameraModuleView = false
+                    },
+                    onVideoCaptured: { videoURL in
+                        self.capturedVideoURL = videoURL
+                        self.isShowingCameraModuleView = false
+                        print("Video saved at: \(videoURL)")
+                    }
+                )
             }
             .fullScreenCover(isPresented: $isShowingCustomCameraView) {
                 CustomCameraView { image in

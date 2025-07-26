@@ -12,11 +12,14 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     @Published public private(set) var capturedImage: UIImage?
     @Published public private(set) var currentZoomFactorForDisplay: CGFloat = 1.0
     @Published public private(set) var cameraPermissionStatus: AVAuthorizationStatus = .notDetermined
+    @Published public private(set) var isRecording: Bool = false
+    @Published public private(set) var recordedVideoURL: URL?
     
     var previewView: UIView
     
     private var session: AVCaptureSession?
     private var photoOutput: AVCapturePhotoOutput?
+    private var movieOutput: AVCaptureMovieFileOutput?
     private let sessionQueue = DispatchQueue(label: "com.CameraModule.sessionQueue")
     
     private var cameraPosition: AVCaptureDevice.Position = .back
@@ -31,14 +34,16 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     public func setupCamera() {
-        checkCameraPermission { [weak self] granted in
-            if granted {
-                self?.setupCamera(position: .back)
+        Task {
+            checkCameraPermission { [weak self] granted in
+                if granted {
+                    self?.setupCamera(position: .back)
+                }
             }
         }
     }
     
-    private func checkCameraPermission(completion: @escaping (Bool) -> Void) {
+    private func checkCameraPermission(completion: @escaping @Sendable (Bool) -> Void) {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         DispatchQueue.main.async { [weak self] in
             self?.cameraPermissionStatus = status
@@ -46,16 +51,35 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         
         switch status {
         case .authorized:
-            completion(true)
+            checkMicrophonePermission(completion: completion)
         case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                DispatchQueue.main.async { [weak self] in
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                Task { @MainActor [weak self] in
                     self?.cameraPermissionStatus = granted ? .authorized : .denied
+                    if granted {
+                        self?.checkMicrophonePermission(completion: completion)
+                    } else {
+                        completion(false)
+                    }
                 }
-                completion(granted)
             }
         default:
             completion(false)
+        }
+    }
+    
+    private func checkMicrophonePermission(completion: @escaping @Sendable (Bool) -> Void) {
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        
+        switch status {
+        case .authorized:
+            completion(true)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                completion(granted)
+            }
+        default:
+            completion(true)
         }
     }
     
@@ -109,6 +133,12 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 session.addInput(deviceInput)
             }
             
+            if let audioDevice = AVCaptureDevice.default(for: .audio),
+               let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+               session.canAddInput(audioInput) {
+                session.addInput(audioInput)
+            }
+            
             let photoOutput = self.photoOutput ?? AVCapturePhotoOutput()
             if session.canAddOutput(photoOutput) {
                 if !session.outputs.contains(where: { $0 === photoOutput }) {
@@ -121,6 +151,14 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                     }
                 }
             }
+            
+            let movieOutput = self.movieOutput ?? AVCaptureMovieFileOutput()
+            if session.canAddOutput(movieOutput) {
+                if !session.outputs.contains(where: { $0 === movieOutput }) {
+                    session.addOutput(movieOutput)
+                }
+            }
+            self.movieOutput = movieOutput
             
             self.setInitialZoom()
             
@@ -143,6 +181,44 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
             self.session = session
             self.photoOutput = photoOutput
         }
+    }
+    
+    public func startRecording() {
+        sessionQueue.async { [weak self] in
+            guard let self = self,
+                  let movieOutput = self.movieOutput,
+                  !movieOutput.isRecording else { return }
+            
+            let outputURL = self.generateVideoFileURL()
+            
+            if let connection = movieOutput.connection(with: .video) {
+                if self.cameraPosition == .front {
+                    connection.isVideoMirrored = true
+                }
+            }
+            
+            movieOutput.startRecording(to: outputURL, recordingDelegate: self)
+            
+            DispatchQueue.main.async {
+                self.isRecording = true
+            }
+        }
+    }
+    
+    public func stopRecording() {
+        sessionQueue.async { [weak self] in
+            guard let self = self,
+                  let movieOutput = self.movieOutput,
+                  movieOutput.isRecording else { return }
+            
+            movieOutput.stopRecording()
+        }
+    }
+    
+    private func generateVideoFileURL() -> URL {
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let fileName = UUID().uuidString + ".mov"
+        return tempDirectory.appendingPathComponent(fileName)
     }
     
     public func zoom(factor: CGFloat) {
@@ -248,6 +324,21 @@ extension CameraViewModel: AVCapturePhotoCaptureDelegate {
             DispatchQueue.main.async {
                 self.capturedImage = image
             }
+        }
+    }
+}
+
+extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
+    public func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        DispatchQueue.main.async { [weak self] in
+            self?.isRecording = false
+            
+            if let error = error {
+                print("Video recording error: \(error.localizedDescription)")
+                return
+            }
+            
+            self?.recordedVideoURL = outputFileURL
         }
     }
 }

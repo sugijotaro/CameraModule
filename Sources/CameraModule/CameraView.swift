@@ -10,11 +10,13 @@ import SwiftUI
 public struct CameraView: View {
     @StateObject private var viewModel = CameraViewModel()
     private var onImageCaptured: (UIImage) -> Void
+    private var onVideoCaptured: ((URL) -> Void)?
     
     @State private var gestureZoomFactor: CGFloat = 1.0
     
-    public init(onImageCaptured: @escaping (UIImage) -> Void) {
+    public init(onImageCaptured: @escaping (UIImage) -> Void, onVideoCaptured: ((URL) -> Void)? = nil) {
         self.onImageCaptured = onImageCaptured
+        self.onVideoCaptured = onVideoCaptured
     }
     
     public var body: some View {
@@ -50,11 +52,18 @@ public struct CameraView: View {
                 HStack {
                     ZStack {
                         Button(action: {
-                            viewModel.capturePhoto()
+                            if viewModel.isRecording {
+                                viewModel.stopRecording()
+                            } else {
+                                viewModel.capturePhoto()
+                            }
                         }) {
                             Circle()
-                                .fill(Color.white)
+                                .fill(viewModel.isRecording ? Color.red : Color.white)
                                 .frame(width: 70, height: 70)
+                        }
+                        .onLongPressGesture(minimumDuration: 0.5) {
+                            viewModel.startRecording()
                         }
                         Circle()
                             .stroke(Color.white, lineWidth: 4)
@@ -89,6 +98,11 @@ public struct CameraView: View {
         .onChange(of: viewModel.capturedImage) { newImage in
             if let image = newImage {
                 onImageCaptured(image)
+            }
+        }
+        .onChange(of: viewModel.recordedVideoURL) { newURL in
+            if let url = newURL {
+                onVideoCaptured?(url)
             }
         }
     }
