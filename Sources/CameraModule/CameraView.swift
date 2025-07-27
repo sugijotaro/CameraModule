@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 public struct CameraView: View {
     @StateObject private var viewModel: CameraViewModel
@@ -16,10 +17,16 @@ public struct CameraView: View {
     
     public init(
         cameraMode: CameraMode = .photoOnly,
+        sessionPreset: AVCaptureSession.Preset = .photo,
+        videoResolution: VideoResolution? = nil,
         onImageCaptured: @escaping (UIImage) -> Void,
         onVideoCaptured: ((URL) -> Void)? = nil
     ) {
-        self._viewModel = StateObject(wrappedValue: CameraViewModel(cameraMode: cameraMode))
+        self._viewModel = StateObject(wrappedValue: CameraViewModel(
+            cameraMode: cameraMode,
+            sessionPreset: sessionPreset,
+            videoResolution: videoResolution
+        ))
         self.onImageCaptured = onImageCaptured
         self.onVideoCaptured = onVideoCaptured
     }

@@ -19,6 +19,29 @@ public enum CaptureMode: String, CaseIterable {
     case video = "Video"
 }
 
+public struct VideoResolution : Sendable{
+    public let width: Int
+    public let height: Int
+    public let sessionPreset: AVCaptureSession.Preset?
+    
+    public init(width: Int, height: Int, sessionPreset: AVCaptureSession.Preset? = nil) {
+        self.width = width
+        self.height = height
+        self.sessionPreset = sessionPreset
+    }
+    
+    public static let hd1920x1080 = VideoResolution(width: 1920, height: 1080, sessionPreset: .hd1920x1080)
+    public static let hd1280x720 = VideoResolution(width: 1280, height: 720, sessionPreset: .hd1280x720)
+    public static let hd4K3840x2160 = VideoResolution(width: 3840, height: 2160, sessionPreset: .hd4K3840x2160)
+    public static let vga640x480 = VideoResolution(width: 640, height: 480, sessionPreset: .vga640x480)
+    public static let iFrame960x540 = VideoResolution(width: 960, height: 540, sessionPreset: .iFrame960x540)
+    public static let iFrame1280x720 = VideoResolution(width: 1280, height: 720, sessionPreset: .iFrame1280x720)
+    
+    public static func custom(width: Int, height: Int) -> VideoResolution {
+        return VideoResolution(width: width, height: height, sessionPreset: nil)
+    }
+}
+
 public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     @Published public private(set) var capturedImage: UIImage?
     @Published public private(set) var currentZoomFactorForDisplay: CGFloat = 1.0
@@ -29,6 +52,8 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     
     var previewView: UIView
     let cameraMode: CameraMode
+    private let sessionPreset: AVCaptureSession.Preset
+    private let videoResolution: VideoResolution?
     
     private var session: AVCaptureSession?
     private var photoOutput: AVCapturePhotoOutput?
@@ -41,9 +66,11 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     private var wideAngleZoomFactor: CGFloat = 2.0
     
     @MainActor
-    public init(cameraMode: CameraMode = .photoOnly) {
+    public init(cameraMode: CameraMode = .photoOnly, sessionPreset: AVCaptureSession.Preset = .photo, videoResolution: VideoResolution? = nil) {
         self.previewView = UIView()
         self.cameraMode = cameraMode
+        self.sessionPreset = sessionPreset
+        self.videoResolution = videoResolution
         super.init()
     }
     
@@ -149,10 +176,20 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 self.wideAngleZoomFactor = 2.0
             }
             
-            session.sessionPreset = .photo
+            if session.canSetSessionPreset(self.sessionPreset) {
+                session.sessionPreset = self.sessionPreset
+            } else {
+                // Fallback to photo preset if the specified preset is not supported
+                session.sessionPreset = .photo
+            }
             
             if session.canAddInput(deviceInput) {
                 session.addInput(deviceInput)
+            }
+            
+            // Apply custom video resolution if specified
+            if let videoResolution = self.videoResolution, videoResolution.sessionPreset == nil {
+                self.applyCustomVideoResolution(videoResolution, to: device)
             }
             
             if cameraMode == .photoAndVideo || cameraMode == .seamless {
@@ -354,6 +391,32 @@ extension CameraViewModel: AVCapturePhotoCaptureDelegate {
             DispatchQueue.main.async {
                 self.capturedImage = image
             }
+        }
+    }
+    
+    private func applyCustomVideoResolution(_ resolution: VideoResolution, to device: AVCaptureDevice) {
+        do {
+            try device.lockForConfiguration()
+            
+            let formats = device.formats.filter { format in
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                return dimensions.width == Int32(resolution.width) && dimensions.height == Int32(resolution.height)
+            }
+            
+            if let bestFormat = formats.first {
+                device.activeFormat = bestFormat
+                
+                let targetFrameRate = 30.0
+                let ranges = bestFormat.videoSupportedFrameRateRanges
+                if let range = ranges.first(where: { $0.minFrameRate <= targetFrameRate && targetFrameRate <= $0.maxFrameRate }) {
+                    device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(targetFrameRate))
+                    device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Int32(targetFrameRate))
+                }
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("Could not set custom video resolution: \(error)")
         }
     }
 }
