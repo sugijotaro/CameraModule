@@ -8,18 +8,43 @@
 import SwiftUI
 
 struct CaptureButton: View {
-    @ObservedObject var viewModel: CameraViewModel
+    let cameraMode: CameraMode
+    let captureMode: CaptureMode
+    @Binding var isRecording: Bool
+    @Binding var isProcessingCapture: Bool
+    @Binding var isProcessingVideo: Bool
     @Binding var showCaptureAnimation: Bool
+    
+    let onCapturePhoto: () -> Void
+    let onStartRecording: () -> Void
+    let onStopRecording: () -> Void
     
     var body: some View {
         ZStack {
-            switch (viewModel.cameraMode, viewModel.captureMode) {
+            switch (cameraMode, captureMode) {
             case (.seamless, _):
-                SeamlessCaptureButton(viewModel: viewModel, showCaptureAnimation: $showCaptureAnimation)
+                SeamlessCaptureButton(
+                    isRecording: $isRecording,
+                    isProcessingCapture: $isProcessingCapture,
+                    showCaptureAnimation: $showCaptureAnimation,
+                    onCapturePhoto: onCapturePhoto,
+                    onStartRecording: onStartRecording,
+                    onStopRecording: onStopRecording
+                )
             case (_, .photo):
-                PhotoCaptureButton(viewModel: viewModel, showCaptureAnimation: $showCaptureAnimation)
+                PhotoCaptureButton(
+                    isProcessingCapture: $isProcessingCapture,
+                    showCaptureAnimation: $showCaptureAnimation,
+                    onCapturePhoto: onCapturePhoto
+                )
             case (_, .video):
-                VideoCaptureButton(viewModel: viewModel, showCaptureAnimation: $showCaptureAnimation)
+                VideoCaptureButton(
+                    isRecording: $isRecording,
+                    isProcessingVideo: $isProcessingVideo,
+                    showCaptureAnimation: $showCaptureAnimation,
+                    onStartRecording: onStartRecording,
+                    onStopRecording: onStopRecording
+                )
             }
         }
     }
@@ -27,13 +52,14 @@ struct CaptureButton: View {
 
 // MARK: - Photo Capture Button
 struct PhotoCaptureButton: View {
-    @ObservedObject var viewModel: CameraViewModel
+    @Binding var isProcessingCapture: Bool
     @Binding var showCaptureAnimation: Bool
+    let onCapturePhoto: () -> Void
     
     var body: some View {
         ZStack {
             Button(action: {
-                viewModel.capturePhoto()
+                onCapturePhoto()
                 withAnimation(.easeOut(duration: 0.3)) {
                     showCaptureAnimation = true
                 }
@@ -46,9 +72,9 @@ struct PhotoCaptureButton: View {
                     .frame(width: 70, height: 70)
                     .scaleEffect(showCaptureAnimation ? 0.8 : 1.0)
             }
-            .disabled(viewModel.isProcessingCapture)
+            .disabled(isProcessingCapture)
             
-            if viewModel.isProcessingCapture {
+            if isProcessingCapture {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .black))
                     .scaleEffect(1.5)
@@ -63,16 +89,19 @@ struct PhotoCaptureButton: View {
 
 // MARK: - Video Capture Button
 struct VideoCaptureButton: View {
-    @ObservedObject var viewModel: CameraViewModel
+    @Binding var isRecording: Bool
+    @Binding var isProcessingVideo: Bool
     @Binding var showCaptureAnimation: Bool
+    let onStartRecording: () -> Void
+    let onStopRecording: () -> Void
     
     var body: some View {
         ZStack {
             Button(action: {
-                if viewModel.isRecording {
-                    viewModel.stopRecording()
+                if isRecording {
+                    onStopRecording()
                 } else {
-                    viewModel.startRecording()
+                    onStartRecording()
                     withAnimation(.easeOut(duration: 0.3)) {
                         showCaptureAnimation = true
                     }
@@ -81,7 +110,7 @@ struct VideoCaptureButton: View {
                     }
                 }
             }) {
-                if viewModel.isRecording {
+                if isRecording {
                     ZStack {
                         Circle()
                             .fill(.white.opacity(0.01))
@@ -89,7 +118,7 @@ struct VideoCaptureButton: View {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color.red)
                             .frame(width: 35, height: 35)
-                            .animation(.easeInOut(duration: 0.2), value: viewModel.isRecording)
+                            .animation(.easeInOut(duration: 0.2), value: isRecording)
                     }
                 } else {
                     Circle()
@@ -98,9 +127,9 @@ struct VideoCaptureButton: View {
                         .scaleEffect(showCaptureAnimation ? 0.8 : 1.0)
                 }
             }
-            .disabled(viewModel.isProcessingVideo)
+            .disabled(isProcessingVideo)
             
-            if viewModel.isProcessingVideo {
+            if isProcessingVideo {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     .scaleEffect(1.5)
@@ -115,20 +144,24 @@ struct VideoCaptureButton: View {
 
 // MARK: - Seamless Capture Button
 struct SeamlessCaptureButton: View {
-    @ObservedObject var viewModel: CameraViewModel
+    @Binding var isRecording: Bool
+    @Binding var isProcessingCapture: Bool
     @Binding var showCaptureAnimation: Bool
+    let onCapturePhoto: () -> Void
+    let onStartRecording: () -> Void
+    let onStopRecording: () -> Void
     
     var body: some View {
         ZStack {
             Circle()
-                .fill(viewModel.isRecording ? Color.red : Color.white)
+                .fill(isRecording ? Color.red : Color.white)
                 .frame(width: 70, height: 70)
-                .scaleEffect(viewModel.isRecording ? 0.8 : (showCaptureAnimation ? 0.8 : 1.0))
-                .animation(.easeInOut(duration: 0.2), value: viewModel.isRecording)
+                .scaleEffect(isRecording ? 0.8 : (showCaptureAnimation ? 0.8 : 1.0))
+                .animation(.easeInOut(duration: 0.2), value: isRecording)
                 .animation(.easeOut(duration: 0.3), value: showCaptureAnimation)
                 .onTapGesture {
-                    if !viewModel.isRecording {
-                        viewModel.capturePhoto()
+                    if !isRecording {
+                        onCapturePhoto()
                         withAnimation(.easeOut(duration: 0.3)) {
                             showCaptureAnimation = true
                         }
@@ -141,16 +174,16 @@ struct SeamlessCaptureButton: View {
                     minimumDuration: 0.5,
                     maximumDistance: .infinity,
                     pressing: { isPressing in
-                        if isPressing && !viewModel.isRecording {
-                            viewModel.startRecording()
-                        } else if !isPressing && viewModel.isRecording {
-                            viewModel.stopRecording()
+                        if isPressing && !isRecording {
+                            onStartRecording()
+                        } else if !isPressing && isRecording {
+                            onStopRecording()
                         }
                     },
                     perform: { }
                 )
             
-            if viewModel.isProcessingCapture && !viewModel.isRecording {
+            if isProcessingCapture && !isRecording {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     .scaleEffect(1.5)

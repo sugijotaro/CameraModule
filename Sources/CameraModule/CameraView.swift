@@ -75,7 +75,26 @@ public struct CameraView: View {
                 }
                 
                 HStack {
-                    CaptureButton(viewModel: viewModel, showCaptureAnimation: $showCaptureAnimation)
+                    CaptureButton(
+                        cameraMode: viewModel.cameraMode,
+                        captureMode: viewModel.captureMode,
+                        isRecording: .init(
+                            get: { viewModel.isRecording },
+                            set: { _ in }
+                        ),
+                        isProcessingCapture: .init(
+                            get: { viewModel.isProcessingCapture },
+                            set: { _ in }
+                        ),
+                        isProcessingVideo: .init(
+                            get: { viewModel.isProcessingVideo },
+                            set: { _ in }
+                        ),
+                        showCaptureAnimation: $showCaptureAnimation,
+                        onCapturePhoto: { viewModel.capturePhoto() },
+                        onStartRecording: { viewModel.startRecording() },
+                        onStopRecording: { viewModel.stopRecording() }
+                    )
                 }
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .trailing) {
