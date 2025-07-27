@@ -107,6 +107,13 @@ public struct CameraView: View {
                                     },
                                     perform: { }
                                 )
+                            
+                            if viewModel.isProcessingCapture && !viewModel.isRecording {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.5)
+                            }
+                            
                             Circle()
                                 .stroke(Color.white, lineWidth: 4)
                                 .frame(width: 80, height: 80)
@@ -129,7 +136,7 @@ public struct CameraView: View {
                             }
                             .disabled(viewModel.isProcessingCapture)
                             
-                            if viewModel.isProcessingCapture && !viewModel.isRecording {
+                            if viewModel.isProcessingCapture {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .black))
                                     .scaleEffect(1.5)
@@ -140,12 +147,19 @@ public struct CameraView: View {
                                 .frame(width: 80, height: 80)
                         }
                     } else {
+                        // Video capture button
                         ZStack {
                             Button(action: {
                                 if viewModel.isRecording {
                                     viewModel.stopRecording()
                                 } else {
                                     viewModel.startRecording()
+                                    withAnimation(.easeOut(duration: 0.3)) {
+                                        showCaptureAnimation = true
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        showCaptureAnimation = false
+                                    }
                                 }
                             }) {
                                 if viewModel.isRecording {
@@ -156,18 +170,23 @@ public struct CameraView: View {
                                         RoundedRectangle(cornerRadius: 8)
                                             .fill(Color.red)
                                             .frame(width: 35, height: 35)
+                                            .animation(.easeInOut(duration: 0.2), value: viewModel.isRecording)
                                     }
                                 } else {
                                     Circle()
                                         .fill(Color.red)
                                         .frame(width: 70, height: 70)
+                                        .scaleEffect(showCaptureAnimation ? 0.8 : 1.0)
                                 }
                             }
-                            if viewModel.isRecording {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.red)
-                                    .frame(width: 35, height: 35)
+                            .disabled(viewModel.isProcessingVideo)
+                            
+                            if viewModel.isProcessingVideo {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.5)
                             }
+                            
                             Circle()
                                 .stroke(Color.white, lineWidth: 4)
                                 .frame(width: 80, height: 80)
@@ -195,8 +214,8 @@ public struct CameraView: View {
             .frame(maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, 30)
             
-            // Flash effect for photo capture
-            if showCaptureAnimation && viewModel.captureMode == .photo {
+            // Flash effect for photo capture (only in photo mode or seamless mode when not recording)
+            if showCaptureAnimation && (viewModel.captureMode == .photo || (viewModel.cameraMode == .seamless && !viewModel.isRecording)) {
                 Color.white
                     .opacity(0.7)
                     .ignoresSafeArea()

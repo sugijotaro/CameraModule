@@ -50,6 +50,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     @Published public private(set) var recordedVideoURL: URL?
     @Published public var captureMode: CaptureMode = .photo
     @Published public private(set) var isProcessingCapture: Bool = false
+    @Published public private(set) var isProcessingVideo: Bool = false
     
     var previewView: UIView
     let cameraMode: CameraMode
@@ -274,10 +275,19 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     public func stopRecording() {
         guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
         
+        DispatchQueue.main.async { [weak self] in
+            self?.isProcessingVideo = true
+        }
+        
         sessionQueue.async { [weak self] in
             guard let self = self,
                   let movieOutput = self.movieOutput,
-                  movieOutput.isRecording else { return }
+                  movieOutput.isRecording else { 
+                DispatchQueue.main.async {
+                    self?.isProcessingVideo = false
+                }
+                return 
+            }
             
             movieOutput.stopRecording()
         }
@@ -436,6 +446,7 @@ extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
     public func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
         DispatchQueue.main.async { [weak self] in
             self?.isRecording = false
+            self?.isProcessingVideo = false
             
             if let error = error {
                 print("Video recording error: \(error.localizedDescription)")
