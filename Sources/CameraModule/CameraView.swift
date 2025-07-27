@@ -14,6 +14,7 @@ public struct CameraView: View {
     private var onVideoCaptured: ((URL) -> Void)?
     
     @State private var gestureZoomFactor: CGFloat = 1.0
+    @State private var showCaptureAnimation = false
     
     public init(
         cameraMode: CameraMode = .photoOnly,
@@ -80,11 +81,18 @@ public struct CameraView: View {
                             Circle()
                                 .fill(viewModel.isRecording ? Color.red : Color.white)
                                 .frame(width: 70, height: 70)
-                                .scaleEffect(viewModel.isRecording ? 0.8 : 1.0)
+                                .scaleEffect(viewModel.isRecording ? 0.8 : (showCaptureAnimation ? 0.8 : 1.0))
                                 .animation(.easeInOut(duration: 0.2), value: viewModel.isRecording)
+                                .animation(.easeOut(duration: 0.3), value: showCaptureAnimation)
                                 .onTapGesture {
                                     if !viewModel.isRecording {
                                         viewModel.capturePhoto()
+                                        withAnimation(.easeOut(duration: 0.3)) {
+                                            showCaptureAnimation = true
+                                        }
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            showCaptureAnimation = false
+                                        }
                                     }
                                 }
                                 .onLongPressGesture(
@@ -107,11 +115,26 @@ public struct CameraView: View {
                         ZStack {
                             Button(action: {
                                 viewModel.capturePhoto()
+                                withAnimation(.easeOut(duration: 0.3)) {
+                                    showCaptureAnimation = true
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    showCaptureAnimation = false
+                                }
                             }) {
                                 Circle()
                                     .fill(Color.white)
                                     .frame(width: 70, height: 70)
+                                    .scaleEffect(showCaptureAnimation ? 0.8 : 1.0)
                             }
+                            .disabled(viewModel.isProcessingCapture)
+                            
+                            if viewModel.isProcessingCapture && !viewModel.isRecording {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                                    .scaleEffect(1.5)
+                            }
+                            
                             Circle()
                                 .stroke(Color.white, lineWidth: 4)
                                 .frame(width: 80, height: 80)
@@ -128,7 +151,7 @@ public struct CameraView: View {
                                 if viewModel.isRecording {
                                     ZStack {
                                         Circle()
-                                            .fill(.clear)
+                                            .fill(.white.opacity(0.01))
                                             .frame(width: 70, height: 70)
                                         RoundedRectangle(cornerRadius: 8)
                                             .fill(Color.red)
@@ -171,6 +194,15 @@ public struct CameraView: View {
             }
             .frame(maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, 30)
+            
+            // Flash effect for photo capture
+            if showCaptureAnimation && viewModel.captureMode == .photo {
+                Color.white
+                    .opacity(0.7)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
         }
         .onAppear {
             viewModel.setupCamera()

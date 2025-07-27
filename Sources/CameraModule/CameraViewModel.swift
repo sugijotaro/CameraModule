@@ -49,6 +49,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     @Published public private(set) var isRecording: Bool = false
     @Published public private(set) var recordedVideoURL: URL?
     @Published public var captureMode: CaptureMode = .photo
+    @Published public private(set) var isProcessingCapture: Bool = false
     
     var previewView: UIView
     let cameraMode: CameraMode
@@ -353,8 +354,17 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     public func capturePhoto() {
+        DispatchQueue.main.async { [weak self] in
+            self?.isProcessingCapture = true
+        }
+        
         sessionQueue.async { [weak self] in
-            guard let self = self, let photoOutput = self.photoOutput, let device = self.activeDevice else { return }
+            guard let self = self, let photoOutput = self.photoOutput, let device = self.activeDevice else { 
+                DispatchQueue.main.async {
+                    self?.isProcessingCapture = false
+                }
+                return 
+            }
             let settings = AVCapturePhotoSettings()
             if self.cameraPosition == .front {
                 if let connection = photoOutput.connection(with: .video) {
@@ -390,6 +400,7 @@ extension CameraViewModel: AVCapturePhotoCaptureDelegate {
             
             DispatchQueue.main.async {
                 self.capturedImage = image
+                self.isProcessingCapture = false
             }
         }
     }
