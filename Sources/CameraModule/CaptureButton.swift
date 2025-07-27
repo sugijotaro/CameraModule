@@ -195,3 +195,79 @@ struct SeamlessCaptureButton: View {
         }
     }
 }
+
+// MARK: - Previews
+
+@available(iOS 17.0, *)
+#Preview("Photo Capture Button") {
+    @Previewable @State var isProcessingCapture = false
+    @Previewable @State var showCaptureAnimation = false
+    
+    ZStack {
+        Color.black.ignoresSafeArea()
+        PhotoCaptureButton(
+            isProcessingCapture: $isProcessingCapture,
+            showCaptureAnimation: $showCaptureAnimation,
+            onCapturePhoto: { 
+                isProcessingCapture = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    isProcessingCapture = false
+                }
+            }
+        )
+    }
+}
+
+@available(iOS 17.0, *)
+#Preview("Video Capture Button") {
+    @Previewable @State var isRecording = false
+    @Previewable @State var isProcessingVideo = false
+    @Previewable @State var showCaptureAnimation = false
+    
+    ZStack {
+        Color.black.ignoresSafeArea()
+        VideoCaptureButton(
+            isRecording: $isRecording,
+            isProcessingVideo: $isProcessingVideo,
+            showCaptureAnimation: $showCaptureAnimation,
+            onStartRecording: { 
+                isRecording = true
+            },
+            onStopRecording: { 
+                isRecording = false
+                isProcessingVideo = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    isProcessingVideo = false
+                }
+            }
+        )
+    }
+}
+
+@available(iOS 17.0, *)
+#Preview("Seamless Capture Button") {
+    @Previewable @State var isRecording = false
+    @Previewable @State var isProcessingCapture = false
+    @Previewable @State var showCaptureAnimation = false
+    
+    ZStack {
+        Color.black.ignoresSafeArea()
+        SeamlessCaptureButton(
+            isRecording: $isRecording,
+            isProcessingCapture: $isProcessingCapture,
+            showCaptureAnimation: $showCaptureAnimation,
+            onCapturePhoto: { 
+                isProcessingCapture = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    isProcessingCapture = false
+                }
+            },
+            onStartRecording: { 
+                isRecording = true
+            },
+            onStopRecording: { 
+                isRecording = false
+            }
+        )
+    }
+}
