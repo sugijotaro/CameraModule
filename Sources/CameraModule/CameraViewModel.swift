@@ -8,37 +8,87 @@
 @preconcurrency import AVFoundation
 import UIKit
 
+public enum CameraMode {
+    case photoOnly
+    case photoAndVideo
+    case seamless
+}
+
+public enum CaptureMode: String, CaseIterable {
+    case photo = "Photo"
+    case video = "Video"
+}
+
+public struct VideoResolution : Sendable{
+    public let width: Int
+    public let height: Int
+    public let sessionPreset: AVCaptureSession.Preset?
+    
+    public init(width: Int, height: Int, sessionPreset: AVCaptureSession.Preset? = nil) {
+        self.width = width
+        self.height = height
+        self.sessionPreset = sessionPreset
+    }
+    
+    public static let hd1920x1080 = VideoResolution(width: 1920, height: 1080, sessionPreset: .hd1920x1080)
+    public static let hd1280x720 = VideoResolution(width: 1280, height: 720, sessionPreset: .hd1280x720)
+    public static let hd4K3840x2160 = VideoResolution(width: 3840, height: 2160, sessionPreset: .hd4K3840x2160)
+    public static let vga640x480 = VideoResolution(width: 640, height: 480, sessionPreset: .vga640x480)
+    public static let iFrame960x540 = VideoResolution(width: 960, height: 540, sessionPreset: .iFrame960x540)
+    public static let iFrame1280x720 = VideoResolution(width: 1280, height: 720, sessionPreset: .iFrame1280x720)
+    
+    public static func custom(width: Int, height: Int) -> VideoResolution {
+        return VideoResolution(width: width, height: height, sessionPreset: nil)
+    }
+}
+
 public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     @Published public private(set) var capturedImage: UIImage?
     @Published public private(set) var currentZoomFactorForDisplay: CGFloat = 1.0
     @Published public private(set) var cameraPermissionStatus: AVAuthorizationStatus = .notDetermined
+    @Published public private(set) var isRecording: Bool = false
+    @Published public private(set) var recordedVideoURL: URL?
+    @Published public var captureMode: CaptureMode = .photo
+    @Published public private(set) var isProcessingCapture: Bool = false
+    @Published public private(set) var isProcessingVideo: Bool = false
     
     var previewView: UIView
+    let cameraMode: CameraMode
+    private let sessionPreset: AVCaptureSession.Preset
+    private let videoResolution: VideoResolution?
     
     private var session: AVCaptureSession?
     private var photoOutput: AVCapturePhotoOutput?
+    private var movieOutput: AVCaptureMovieFileOutput?
     private let sessionQueue = DispatchQueue(label: "com.CameraModule.sessionQueue")
     
     private var cameraPosition: AVCaptureDevice.Position = .back
     private var activeDevice: AVCaptureDevice?
     
     private var wideAngleZoomFactor: CGFloat = 2.0
+    private var hasMicrophonePermission: Bool = false
+    private var hasCheckedMicrophonePermission: Bool = false
     
     @MainActor
-    public override init() {
+    public init(cameraMode: CameraMode = .photoOnly, sessionPreset: AVCaptureSession.Preset = .photo, videoResolution: VideoResolution? = nil) {
         self.previewView = UIView()
+        self.cameraMode = cameraMode
+        self.sessionPreset = sessionPreset
+        self.videoResolution = videoResolution
         super.init()
     }
     
     public func setupCamera() {
-        checkCameraPermission { [weak self] granted in
-            if granted {
-                self?.setupCamera(position: .back)
+        Task {
+            checkCameraPermission { [weak self] granted in
+                if granted {
+                    self?.setupCamera(position: .back)
+                }
             }
         }
     }
     
-    private func checkCameraPermission(completion: @escaping (Bool) -> Void) {
+    private func checkCameraPermission(completion: @escaping @Sendable (Bool) -> Void) {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         DispatchQueue.main.async { [weak self] in
             self?.cameraPermissionStatus = status
@@ -48,13 +98,32 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         case .authorized:
             completion(true)
         case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                DispatchQueue.main.async { [weak self] in
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                Task { @MainActor [weak self] in
                     self?.cameraPermissionStatus = granted ? .authorized : .denied
+                    completion(granted)
                 }
+            }
+        default:
+            completion(false)
+        }
+    }
+    
+    private func checkMicrophonePermission(completion: @escaping @Sendable (Bool) -> Void) {
+        hasCheckedMicrophonePermission = true
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        
+        switch status {
+        case .authorized:
+            hasMicrophonePermission = true
+            completion(true)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                self?.hasMicrophonePermission = granted
                 completion(granted)
             }
         default:
+            hasMicrophonePermission = false
             completion(false)
         }
     }
@@ -103,11 +172,23 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 self.wideAngleZoomFactor = 2.0
             }
             
-            session.sessionPreset = .photo
+            if session.canSetSessionPreset(self.sessionPreset) {
+                session.sessionPreset = self.sessionPreset
+            } else {
+                // Fallback to photo preset if the specified preset is not supported
+                session.sessionPreset = .photo
+            }
             
             if session.canAddInput(deviceInput) {
                 session.addInput(deviceInput)
             }
+            
+            // Apply custom video resolution if specified
+            if let videoResolution = self.videoResolution, videoResolution.sessionPreset == nil {
+                self.applyCustomVideoResolution(videoResolution, to: device)
+            }
+            
+            // Audio input will be added when needed for video recording
             
             let photoOutput = self.photoOutput ?? AVCapturePhotoOutput()
             if session.canAddOutput(photoOutput) {
@@ -120,6 +201,16 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                         photoOutput.maxPhotoDimensions = maxDimensions
                     }
                 }
+            }
+            
+            if cameraMode == .photoAndVideo || cameraMode == .seamless {
+                let movieOutput = self.movieOutput ?? AVCaptureMovieFileOutput()
+                if session.canAddOutput(movieOutput) {
+                    if !session.outputs.contains(where: { $0 === movieOutput }) {
+                        session.addOutput(movieOutput)
+                    }
+                }
+                self.movieOutput = movieOutput
             }
             
             self.setInitialZoom()
@@ -143,6 +234,96 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
             self.session = session
             self.photoOutput = photoOutput
         }
+    }
+    
+    public func prepareForVideoRecording() {
+        guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
+        
+        // Check if we need to add audio input
+        if !hasCheckedMicrophonePermission || !hasMicrophonePermission {
+            checkMicrophonePermission { [weak self] granted in
+                if granted {
+                    self?.addAudioInput()
+                }
+            }
+        }
+    }
+    
+    public func startRecording() {
+        guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
+        
+        sessionQueue.async { [weak self] in
+            self?.startRecordingInternal()
+        }
+    }
+    
+    private func addAudioInput() {
+        sessionQueue.async { [weak self] in
+            guard let self = self,
+                  let session = self.session else { return }
+            
+            // Add audio input if not already added
+            let hasAudioInput = session.inputs.contains { input in
+                if let deviceInput = input as? AVCaptureDeviceInput {
+                    return deviceInput.device.hasMediaType(.audio)
+                }
+                return false
+            }
+            
+            if !hasAudioInput {
+                if let audioDevice = AVCaptureDevice.default(for: .audio),
+                   let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+                   session.canAddInput(audioInput) {
+                    session.addInput(audioInput)
+                }
+            }
+        }
+    }
+    
+    private func startRecordingInternal() {
+        guard let movieOutput = self.movieOutput,
+              !movieOutput.isRecording else { return }
+        
+        let outputURL = self.generateVideoFileURL()
+        
+        if let connection = movieOutput.connection(with: .video) {
+            if self.cameraPosition == .front {
+                connection.isVideoMirrored = true
+            }
+        }
+        
+        movieOutput.startRecording(to: outputURL, recordingDelegate: self)
+        
+        DispatchQueue.main.async {
+            self.isRecording = true
+        }
+    }
+    
+    public func stopRecording() {
+        guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.isProcessingVideo = true
+        }
+        
+        sessionQueue.async { [weak self] in
+            guard let self = self,
+                  let movieOutput = self.movieOutput,
+                  movieOutput.isRecording else {
+                DispatchQueue.main.async {
+                    self?.isProcessingVideo = false
+                }
+                return
+            }
+            
+            movieOutput.stopRecording()
+        }
+    }
+    
+    private func generateVideoFileURL() -> URL {
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let fileName = UUID().uuidString + ".mov"
+        return tempDirectory.appendingPathComponent(fileName)
     }
     
     public func zoom(factor: CGFloat) {
@@ -210,8 +391,17 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     public func capturePhoto() {
+        DispatchQueue.main.async { [weak self] in
+            self?.isProcessingCapture = true
+        }
+        
         sessionQueue.async { [weak self] in
-            guard let self = self, let photoOutput = self.photoOutput, let device = self.activeDevice else { return }
+            guard let self = self, let photoOutput = self.photoOutput, let device = self.activeDevice else {
+                DispatchQueue.main.async {
+                    self?.isProcessingCapture = false
+                }
+                return
+            }
             let settings = AVCapturePhotoSettings()
             if self.cameraPosition == .front {
                 if let connection = photoOutput.connection(with: .video) {
@@ -247,7 +437,50 @@ extension CameraViewModel: AVCapturePhotoCaptureDelegate {
             
             DispatchQueue.main.async {
                 self.capturedImage = image
+                self.isProcessingCapture = false
             }
+        }
+    }
+    
+    private func applyCustomVideoResolution(_ resolution: VideoResolution, to device: AVCaptureDevice) {
+        do {
+            try device.lockForConfiguration()
+            
+            let formats = device.formats.filter { format in
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                return dimensions.width == Int32(resolution.width) && dimensions.height == Int32(resolution.height)
+            }
+            
+            if let bestFormat = formats.first {
+                device.activeFormat = bestFormat
+                
+                let targetFrameRate = 30.0
+                let ranges = bestFormat.videoSupportedFrameRateRanges
+                if let range = ranges.first(where: { $0.minFrameRate <= targetFrameRate && targetFrameRate <= $0.maxFrameRate }) {
+                    device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(targetFrameRate))
+                    device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Int32(targetFrameRate))
+                }
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("Could not set custom video resolution: \(error)")
+        }
+    }
+}
+
+extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
+    public func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        DispatchQueue.main.async { [weak self] in
+            self?.isRecording = false
+            self?.isProcessingVideo = false
+            
+            if let error = error {
+                print("Video recording error: \(error.localizedDescription)")
+                return
+            }
+            
+            self?.recordedVideoURL = outputFileURL
         }
     }
 }

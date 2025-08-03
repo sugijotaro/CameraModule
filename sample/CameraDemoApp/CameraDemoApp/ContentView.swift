@@ -7,11 +7,16 @@
 
 import SwiftUI
 import CameraModule
+import AVKit
 
 struct ContentView: View {
     @State private var capturedImage: UIImage?
+    @State private var capturedVideoURL: URL?
     @State private var isShowingCameraModuleView = false
+    @State private var isShowingPhotoVideoView = false
+    @State private var isShowingSeamlessView = false
     @State private var isShowingCustomCameraView = false
+    @State private var isShowingFixedSizeView = false
     
     var body: some View {
         NavigationView {
@@ -34,6 +39,27 @@ struct ContentView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(.secondary)
+                    Spacer()
+                    
+                } else if let videoURL = capturedVideoURL {
+                    Spacer()
+                    Text("Captured Video")
+                        .font(.headline)
+                    VideoPlayer(player: AVPlayer(url: videoURL))
+                        .frame(height: 400)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(radius: 5)
+                        .padding()
+                    
+                    HStack(spacing: 20) {
+                        Button {
+                            capturedVideoURL = nil
+                        } label: {
+                            Label("Record Another", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.secondary)
+                    }
                     Spacer()
                     
                 } else {
@@ -59,7 +85,25 @@ struct ContentView: View {
                         Button {
                             isShowingCameraModuleView = true
                         } label: {
-                            Label("Default Fullscreen Camera", systemImage: "camera.fill")
+                            Label("Photo Only Camera", systemImage: "camera.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        
+                        Button {
+                            isShowingPhotoVideoView = true
+                        } label: {
+                            Label("Photo & Video Camera", systemImage: "video.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        
+                        Button {
+                            isShowingSeamlessView = true
+                        } label: {
+                            Label("Seamless Camera", systemImage: "camera.aperture")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
@@ -73,22 +117,80 @@ struct ContentView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
+                        
+                        Button {
+                            isShowingFixedSizeView = true
+                        } label: {
+                            Label("Fixed Size Camera (1024x1536)", systemImage: "aspectratio")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
                     }
                     .padding()
                 }
             }
             .navigationBarHidden(true)
             .fullScreenCover(isPresented: $isShowingCameraModuleView) {
-                CameraView { image in
-                    self.capturedImage = image
-                    self.isShowingCameraModuleView = false
-                }
+                CameraView(
+                    cameraMode: .photoOnly,
+                    onImageCaptured: { image in
+                        self.capturedImage = image
+                        self.isShowingCameraModuleView = false
+                    }
+                )
+            }
+            .fullScreenCover(isPresented: $isShowingPhotoVideoView) {
+                CameraView(
+                    cameraMode: .photoAndVideo,
+                    onImageCaptured: { image in
+                        self.capturedImage = image
+                        self.capturedVideoURL = nil
+                        self.isShowingPhotoVideoView = false
+                    },
+                    onVideoCaptured: { videoURL in
+                        self.capturedVideoURL = videoURL
+                        self.capturedImage = nil
+                        self.isShowingPhotoVideoView = false
+                        print("Video saved at: \(videoURL)")
+                    }
+                )
+            }
+            .fullScreenCover(isPresented: $isShowingSeamlessView) {
+                CameraView(
+                    cameraMode: .seamless,
+                    onImageCaptured: { image in
+                        self.capturedImage = image
+                        self.capturedVideoURL = nil
+                        self.isShowingSeamlessView = false
+                    },
+                    onVideoCaptured: { videoURL in
+                        self.capturedVideoURL = videoURL
+                        self.capturedImage = nil
+                        self.isShowingSeamlessView = false
+                        print("Video saved at: \(videoURL)")
+                    }
+                )
             }
             .fullScreenCover(isPresented: $isShowingCustomCameraView) {
                 CustomCameraView { image in
                     self.capturedImage = image
                     self.isShowingCustomCameraView = false
                 }
+            }
+            .fullScreenCover(isPresented: $isShowingFixedSizeView) {
+                FixedSizeCameraView(
+                    onImageCaptured: { image in
+                        self.capturedImage = image
+                        self.capturedVideoURL = nil
+                        self.isShowingFixedSizeView = false
+                    },
+                    onVideoCaptured: { videoURL in
+                        self.capturedVideoURL = videoURL
+                        self.capturedImage = nil
+                        self.isShowingFixedSizeView = false
+                    }
+                )
             }
         }
     }

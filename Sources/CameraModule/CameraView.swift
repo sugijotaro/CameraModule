@@ -6,15 +6,30 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 public struct CameraView: View {
-    @StateObject private var viewModel = CameraViewModel()
+    @StateObject private var viewModel: CameraViewModel
     private var onImageCaptured: (UIImage) -> Void
+    private var onVideoCaptured: ((URL) -> Void)?
     
     @State private var gestureZoomFactor: CGFloat = 1.0
+    @State private var showCaptureAnimation = false
     
-    public init(onImageCaptured: @escaping (UIImage) -> Void) {
+    public init(
+        cameraMode: CameraMode = .photoOnly,
+        sessionPreset: AVCaptureSession.Preset = .photo,
+        videoResolution: VideoResolution? = nil,
+        onImageCaptured: @escaping (UIImage) -> Void,
+        onVideoCaptured: ((URL) -> Void)? = nil
+    ) {
+        self._viewModel = StateObject(wrappedValue: CameraViewModel(
+            cameraMode: cameraMode,
+            sessionPreset: sessionPreset,
+            videoResolution: videoResolution
+        ))
         self.onImageCaptured = onImageCaptured
+        self.onVideoCaptured = onVideoCaptured
     }
     
     public var body: some View {
@@ -47,38 +62,69 @@ public struct CameraView: View {
                         .background(Color.black.opacity(0.5))
                         .clipShape(Capsule())
                 }
-                HStack {
-                    ZStack {
-                        Button(action: {
-                            viewModel.capturePhoto()
-                        }) {
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 70, height: 70)
+                
+                if viewModel.cameraMode == .photoAndVideo {
+                    Picker("Mode", selection: $viewModel.captureMode) {
+                        ForEach(CaptureMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
                         }
-                        Circle()
-                            .stroke(Color.white, lineWidth: 4)
-                            .frame(width: 80, height: 80)
                     }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 150)
+                    .padding(.bottom, 20)
+                }
+                
+                HStack {
+                    CaptureButton(
+                        cameraMode: viewModel.cameraMode,
+                        captureMode: viewModel.captureMode,
+                        isRecording: .init(
+                            get: { viewModel.isRecording },
+                            set: { _ in }
+                        ),
+                        isProcessingCapture: .init(
+                            get: { viewModel.isProcessingCapture },
+                            set: { _ in }
+                        ),
+                        isProcessingVideo: .init(
+                            get: { viewModel.isProcessingVideo },
+                            set: { _ in }
+                        ),
+                        showCaptureAnimation: $showCaptureAnimation,
+                        onCapturePhoto: { viewModel.capturePhoto() },
+                        onStartRecording: { viewModel.startRecording() },
+                        onStopRecording: { viewModel.stopRecording() }
+                    )
                 }
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .trailing) {
-                    Button(action: {
-                        viewModel.switchCamera()
-                        self.gestureZoomFactor = 2.0
-                    }) {
-                        Image(systemName: "arrow.triangle.2.circlepath.camera")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
+                    if !viewModel.isRecording {
+                        Button(action: {
+                            viewModel.switchCamera()
+                            self.gestureZoomFactor = 2.0
+                        }) {
+                            Image(systemName: "arrow.triangle.2.circlepath.camera")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(Circle())
+                        }
+                        .padding(.trailing, 20)
                     }
-                    .padding(.trailing, 20)
                 }
             }
             .frame(maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, 30)
+            
+            // Flash effect for photo capture (only in photo mode or seamless mode when not recording)
+            if showCaptureAnimation && (viewModel.captureMode == .photo || (viewModel.cameraMode == .seamless && !viewModel.isRecording)) {
+                Color.white
+                    .opacity(0.7)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
         }
         .onAppear {
             viewModel.setupCamera()
@@ -89,6 +135,11 @@ public struct CameraView: View {
         .onChange(of: viewModel.capturedImage) { newImage in
             if let image = newImage {
                 onImageCaptured(image)
+            }
+        }
+        .onChange(of: viewModel.recordedVideoURL) { newURL in
+            if let url = newURL {
+                onVideoCaptured?(url)
             }
         }
     }
