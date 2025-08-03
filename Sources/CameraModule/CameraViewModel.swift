@@ -47,7 +47,8 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     @Published public private(set) var currentZoomFactorForDisplay: CGFloat = 1.0
     @Published public private(set) var cameraPermissionStatus: AVAuthorizationStatus = .notDetermined
     @Published public private(set) var isRecording: Bool = false
-    @Published public private(set) var recordedVideoURL: URL?
+    @Published public private(set) var capturedMovieURL: URL?
+    @Published public private(set) var recordingDuration: TimeInterval = 0
     @Published public var captureMode: CaptureMode = .photo
     @Published public private(set) var isProcessingCapture: Bool = false
     @Published public private(set) var isProcessingVideo: Bool = false
@@ -59,7 +60,9 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     
     private var session: AVCaptureSession?
     private var photoOutput: AVCapturePhotoOutput?
-    private var movieOutput: AVCaptureMovieFileOutput?
+    private var movieFileOutput: AVCaptureMovieFileOutput?
+    private var recordingTimer: Timer?
+    private let maxRecordingDuration: TimeInterval = 10.0
     private let sessionQueue = DispatchQueue(label: "com.CameraModule.sessionQueue")
     
     private var cameraPosition: AVCaptureDevice.Position = .back
@@ -216,13 +219,13 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
             }
             
             if cameraMode == .photoAndVideo || cameraMode == .seamless {
-                let movieOutput = self.movieOutput ?? AVCaptureMovieFileOutput()
-                if session.canAddOutput(movieOutput) {
-                    if !session.outputs.contains(where: { $0 === movieOutput }) {
-                        session.addOutput(movieOutput)
+                let movieFileOutput = self.movieFileOutput ?? AVCaptureMovieFileOutput()
+                if session.canAddOutput(movieFileOutput) {
+                    if !session.outputs.contains(where: { $0 === movieFileOutput }) {
+                        session.addOutput(movieFileOutput)
                     }
                 }
-                self.movieOutput = movieOutput
+                self.movieFileOutput = movieFileOutput
             }
             
             self.setInitialZoom()
@@ -253,21 +256,31 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         
         sessionQueue.async { [weak self] in
             guard let self = self,
-                  let movieOutput = self.movieOutput,
-                  !movieOutput.isRecording else { return }
+                  let movieFileOutput = self.movieFileOutput,
+                  !movieFileOutput.isRecording else { return }
             
-            let outputURL = self.generateVideoFileURL()
+            let outputFileName = NSUUID().uuidString
+            let outputFilePath = (NSTemporaryDirectory() as NSString).appendingPathComponent((outputFileName as NSString).appendingPathExtension("mp4")!)
+            let outputURL = URL(fileURLWithPath: outputFilePath)
             
-            if let connection = movieOutput.connection(with: .video) {
+            if let connection = movieFileOutput.connection(with: .video) {
                 if self.cameraPosition == .front {
                     connection.isVideoMirrored = true
                 }
             }
             
-            movieOutput.startRecording(to: outputURL, recordingDelegate: self)
+            movieFileOutput.startRecording(to: outputURL, recordingDelegate: self)
             
             DispatchQueue.main.async {
                 self.isRecording = true
+                self.recordingDuration = 0
+                self.recordingTimer?.invalidate()
+                self.recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                    self.recordingDuration += 0.1
+                    if self.recordingDuration >= self.maxRecordingDuration {
+                        self.stopRecording()
+                    }
+                }
             }
         }
     }
@@ -275,29 +288,44 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     public func stopRecording() {
         guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
         
-        DispatchQueue.main.async { [weak self] in
-            self?.isProcessingVideo = true
-        }
-        
         sessionQueue.async { [weak self] in
             guard let self = self,
-                  let movieOutput = self.movieOutput,
-                  movieOutput.isRecording else { 
-                DispatchQueue.main.async {
-                    self?.isProcessingVideo = false
-                }
-                return 
-            }
+                  let movieFileOutput = self.movieFileOutput,
+                  movieFileOutput.isRecording else { return }
             
-            movieOutput.stopRecording()
+            movieFileOutput.stopRecording()
+            
+            DispatchQueue.main.async {
+                self.isRecording = false
+                self.recordingTimer?.invalidate()
+                self.recordingTimer = nil
+            }
         }
     }
     
-    private func generateVideoFileURL() -> URL {
-        let tempDirectory = FileManager.default.temporaryDirectory
-        let fileName = UUID().uuidString + ".mov"
-        return tempDirectory.appendingPathComponent(fileName)
+    public func cancelRecording() {
+        guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
+        
+        sessionQueue.async { [weak self] in
+            guard let self = self,
+                  let movieFileOutput = self.movieFileOutput else { return }
+            
+            if movieFileOutput.isRecording {
+                movieFileOutput.stopRecording()
+            }
+            
+            DispatchQueue.main.async {
+                if let url = self.capturedMovieURL {
+                    try? FileManager.default.removeItem(at: url)
+                    self.capturedMovieURL = nil
+                }
+                self.isRecording = false
+                self.recordingTimer?.invalidate()
+                self.recordingTimer = nil
+            }
+        }
     }
+    
     
     public func zoom(factor: CGFloat) {
         sessionQueue.async { [weak self] in
@@ -369,11 +397,11 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         }
         
         sessionQueue.async { [weak self] in
-            guard let self = self, let photoOutput = self.photoOutput, let device = self.activeDevice else { 
+            guard let self = self, let photoOutput = self.photoOutput, let device = self.activeDevice else {
                 DispatchQueue.main.async {
                     self?.isProcessingCapture = false
                 }
-                return 
+                return
             }
             let settings = AVCapturePhotoSettings()
             if self.cameraPosition == .front {
@@ -389,6 +417,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     public func stopSession() {
         sessionQueue.async { [weak self] in
             guard let self = self, let session = self.session, session.isRunning else { return }
+            self.cancelRecording()
             session.stopRunning()
         }
     }
@@ -444,16 +473,14 @@ extension CameraViewModel: AVCapturePhotoCaptureDelegate {
 
 extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
     public func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
-        DispatchQueue.main.async { [weak self] in
-            self?.isRecording = false
-            self?.isProcessingVideo = false
-            
+        DispatchQueue.main.async {
             if let error = error {
-                print("Video recording error: \(error.localizedDescription)")
-                return
+                print("Error recording movie: \(error.localizedDescription)")
+                self.capturedMovieURL = nil
+            } else {
+                self.capturedMovieURL = outputFileURL
+                print("Movie recording finished successfully. URL: \(outputFileURL)")
             }
-            
-            self?.recordedVideoURL = outputFileURL
         }
     }
 }
