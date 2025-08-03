@@ -66,6 +66,8 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     private var activeDevice: AVCaptureDevice?
     
     private var wideAngleZoomFactor: CGFloat = 2.0
+    private var hasMicrophonePermission: Bool = false
+    private var hasCheckedMicrophonePermission: Bool = false
     
     @MainActor
     public init(cameraMode: CameraMode = .photoOnly, sessionPreset: AVCaptureSession.Preset = .photo, videoResolution: VideoResolution? = nil) {
@@ -94,24 +96,12 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         
         switch status {
         case .authorized:
-            if cameraMode == .photoAndVideo || cameraMode == .seamless {
-                checkMicrophonePermission(completion: completion)
-            } else {
-                completion(true)
-            }
+            completion(true)
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
                 Task { @MainActor [weak self] in
                     self?.cameraPermissionStatus = granted ? .authorized : .denied
-                    if granted {
-                        if self?.cameraMode == .photoAndVideo || self?.cameraMode == .seamless {
-                            self?.checkMicrophonePermission(completion: completion)
-                        } else {
-                            completion(true)
-                        }
-                    } else {
-                        completion(false)
-                    }
+                    completion(granted)
                 }
             }
         default:
@@ -120,17 +110,21 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     private func checkMicrophonePermission(completion: @escaping @Sendable (Bool) -> Void) {
+        hasCheckedMicrophonePermission = true
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
         
         switch status {
         case .authorized:
+            hasMicrophonePermission = true
             completion(true)
         case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                self?.hasMicrophonePermission = granted
                 completion(granted)
             }
         default:
-            completion(true)
+            hasMicrophonePermission = false
+            completion(false)
         }
     }
     
@@ -194,13 +188,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 self.applyCustomVideoResolution(videoResolution, to: device)
             }
             
-            if cameraMode == .photoAndVideo || cameraMode == .seamless {
-                if let audioDevice = AVCaptureDevice.default(for: .audio),
-                   let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
-                   session.canAddInput(audioInput) {
-                    session.addInput(audioInput)
-                }
-            }
+            // Audio input will be added when needed for video recording
             
             let photoOutput = self.photoOutput ?? AVCapturePhotoOutput()
             if session.canAddOutput(photoOutput) {
@@ -248,27 +236,66 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         }
     }
     
+    public func prepareForVideoRecording() {
+        guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
+        
+        // Check if we need to add audio input
+        if !hasCheckedMicrophonePermission || !hasMicrophonePermission {
+            checkMicrophonePermission { [weak self] granted in
+                if granted {
+                    self?.addAudioInput()
+                }
+            }
+        }
+    }
+    
     public func startRecording() {
         guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
         
         sessionQueue.async { [weak self] in
+            self?.startRecordingInternal()
+        }
+    }
+    
+    private func addAudioInput() {
+        sessionQueue.async { [weak self] in
             guard let self = self,
-                  let movieOutput = self.movieOutput,
-                  !movieOutput.isRecording else { return }
+                  let session = self.session else { return }
             
-            let outputURL = self.generateVideoFileURL()
+            // Add audio input if not already added
+            let hasAudioInput = session.inputs.contains { input in
+                if let deviceInput = input as? AVCaptureDeviceInput {
+                    return deviceInput.device.hasMediaType(.audio)
+                }
+                return false
+            }
             
-            if let connection = movieOutput.connection(with: .video) {
-                if self.cameraPosition == .front {
-                    connection.isVideoMirrored = true
+            if !hasAudioInput {
+                if let audioDevice = AVCaptureDevice.default(for: .audio),
+                   let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+                   session.canAddInput(audioInput) {
+                    session.addInput(audioInput)
                 }
             }
-            
-            movieOutput.startRecording(to: outputURL, recordingDelegate: self)
-            
-            DispatchQueue.main.async {
-                self.isRecording = true
+        }
+    }
+    
+    private func startRecordingInternal() {
+        guard let movieOutput = self.movieOutput,
+              !movieOutput.isRecording else { return }
+        
+        let outputURL = self.generateVideoFileURL()
+        
+        if let connection = movieOutput.connection(with: .video) {
+            if self.cameraPosition == .front {
+                connection.isVideoMirrored = true
             }
+        }
+        
+        movieOutput.startRecording(to: outputURL, recordingDelegate: self)
+        
+        DispatchQueue.main.async {
+            self.isRecording = true
         }
     }
     

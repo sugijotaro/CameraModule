@@ -57,6 +57,10 @@ struct FixedSizeCameraView: View {
                                 Button(action: {
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         isPhotoMode.toggle()
+                                        if !isPhotoMode {
+                                            // Prepare for video recording when switching to video mode
+                                            viewModel.prepareForVideoRecording()
+                                        }
                                     }
                                 }) {
                                     HStack(spacing: 8) {
