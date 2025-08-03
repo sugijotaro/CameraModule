@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var isShowingPhotoVideoView = false
     @State private var isShowingSeamlessView = false
     @State private var isShowingCustomCameraView = false
+    @State private var isShowingFixedSizeView = false
     
     var body: some View {
         NavigationView {
@@ -116,6 +117,15 @@ struct ContentView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
+                        
+                        Button {
+                            isShowingFixedSizeView = true
+                        } label: {
+                            Label("Fixed Size Camera (1024x1536)", systemImage: "aspectratio")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
                     }
                     .padding()
                 }
@@ -167,6 +177,20 @@ struct ContentView: View {
                     self.capturedImage = image
                     self.isShowingCustomCameraView = false
                 }
+            }
+            .fullScreenCover(isPresented: $isShowingFixedSizeView) {
+                FixedSizeCameraView(
+                    onImageCaptured: { image in
+                        self.capturedImage = image
+                        self.capturedVideoURL = nil
+                        self.isShowingFixedSizeView = false
+                    },
+                    onVideoCaptured: { videoURL in
+                        self.capturedVideoURL = videoURL
+                        self.capturedImage = nil
+                        self.isShowingFixedSizeView = false
+                    }
+                )
             }
         }
     }
