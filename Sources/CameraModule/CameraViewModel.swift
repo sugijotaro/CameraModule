@@ -236,17 +236,27 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         }
     }
     
-    public func prepareForVideoRecording() {
-        guard cameraMode == .photoAndVideo || cameraMode == .seamless else { return }
+    public func prepareForVideoRecording(completion: @escaping @Sendable () -> Void) {
+        guard cameraMode == .photoAndVideo || cameraMode == .seamless else {
+            completion()
+            return
+        }
         
-        // Check if we need to add audio input
         if !hasCheckedMicrophonePermission || !hasMicrophonePermission {
             checkMicrophonePermission { [weak self] granted in
                 if granted {
-                    self?.addAudioInput()
+                    self?.addAudioInput(completion: completion)
+                } else {
+                    completion()
                 }
             }
+        } else {
+            addAudioInput(completion: completion)
         }
+    }
+    
+    public func prepareForVideoRecording() {
+        prepareForVideoRecording(completion: {})
     }
     
     public func startRecording() {
@@ -257,10 +267,13 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         }
     }
     
-    private func addAudioInput() {
+    private func addAudioInput(completion: @escaping @Sendable () -> Void) {
         sessionQueue.async { [weak self] in
             guard let self = self,
-                  let session = self.session else { return }
+                  let session = self.session else {
+                DispatchQueue.main.async { completion() }
+                return
+            }
             
             // Add audio input if not already added
             let hasAudioInput = session.inputs.contains { input in
@@ -276,6 +289,11 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                    session.canAddInput(audioInput) {
                     session.addInput(audioInput)
                 }
+            }
+            
+            // Call completion handler on main thread after audio input setup
+            DispatchQueue.main.async {
+                completion()
             }
         }
     }
