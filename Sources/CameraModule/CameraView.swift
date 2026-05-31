@@ -20,13 +20,15 @@ public struct CameraView: View {
         cameraMode: CameraMode = .photoOnly,
         sessionPreset: AVCaptureSession.Preset = .photo,
         videoResolution: VideoResolution? = nil,
+        initialCameraPosition: AVCaptureDevice.Position = .back,
         onImageCaptured: @escaping (UIImage) -> Void,
         onVideoCaptured: ((URL) -> Void)? = nil
     ) {
         self._viewModel = StateObject(wrappedValue: CameraViewModel(
             cameraMode: cameraMode,
             sessionPreset: sessionPreset,
-            videoResolution: videoResolution
+            videoResolution: videoResolution,
+            initialCameraPosition: initialCameraPosition
         ))
         self.onImageCaptured = onImageCaptured
         self.onVideoCaptured = onVideoCaptured

@@ -7,7 +7,7 @@
 
 - **SwiftUIネイティブ**: SwiftUIアプリにシームレスに統合できます。
 - **写真撮影**: 高解像度での写真撮影に対応しています。
-- **カメラ切り替え**: フロントカメラとバックカメラを簡単に切り替えられます。
+- **カメラ切り替え**: フロントカメラとバックカメラを簡単に切り替えられるほか、起動時にどちらを使うかも指定できます。
 - **スムーズなズーム**: ピンチ操作による直感的なズームが可能です。
 - **広角カメラ対応**: デュアルカメラやトリプルカメラを搭載したデバイスでは、広角レンズへの切り替えをサポートします。
 - **柔軟なカスタマイズ**: `CameraViewModel`と`CameraPreview`を直接利用して、独自のカメラUIを自由に構築できます。
@@ -76,6 +76,18 @@ struct MyContentView: View {
 }
 ```
 
+#### 起動時のカメラを指定する
+
+デフォルトでは背面カメラで起動します。`initialCameraPosition` を指定すると、フロントカメラで起動できます（セルフィー向けの画面など）。
+
+```swift
+CameraView(initialCameraPosition: .front) { image in
+    self.capturedImage = image
+}
+```
+
+切り替えボタンはそのまま動作するので、ユーザーは後からもう一方のカメラに切り替えられます。
+
 ### 3. カスタムUIでの使い方
 
 より柔軟にUIをカスタマイズしたい場合は、`CameraViewModel` と `CameraPreview` を直接利用します。
@@ -89,6 +101,7 @@ import CameraModule
 
 struct CustomCameraView: View {
     // ViewModelを直接インスタンス化して使用
+    // フロントカメラで起動したい場合は `initialCameraPosition: .front` を渡す
     @StateObject private var viewModel = CameraViewModel()
     
     // 撮影完了時のコールバック

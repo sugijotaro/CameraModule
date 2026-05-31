@@ -62,28 +62,35 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     private var movieOutput: AVCaptureMovieFileOutput?
     private let sessionQueue = DispatchQueue(label: "com.CameraModule.sessionQueue")
     
-    private var cameraPosition: AVCaptureDevice.Position = .back
+    private var cameraPosition: AVCaptureDevice.Position
     private var activeDevice: AVCaptureDevice?
-    
+
     private var wideAngleZoomFactor: CGFloat = 2.0
     private var hasMicrophonePermission: Bool = false
     private var hasCheckedMicrophonePermission: Bool = false
-    
+
     @MainActor
-    public init(cameraMode: CameraMode = .photoOnly, sessionPreset: AVCaptureSession.Preset = .photo, videoResolution: VideoResolution? = nil) {
+    public init(
+        cameraMode: CameraMode = .photoOnly,
+        sessionPreset: AVCaptureSession.Preset = .photo,
+        videoResolution: VideoResolution? = nil,
+        initialCameraPosition: AVCaptureDevice.Position = .back
+    ) {
         self.previewView = UIView()
         self.cameraMode = cameraMode
         self.sessionPreset = sessionPreset
         self.videoResolution = videoResolution
+        // .unspecified が渡された場合は .back にフォールバック。デバイス未発見時の
+        // 既存フォールバック (setupCamera(position:) 内) と挙動を揃える。
+        self.cameraPosition = (initialCameraPosition == .unspecified) ? .back : initialCameraPosition
         super.init()
     }
-    
+
     public func setupCamera() {
         Task {
             checkCameraPermission { [weak self] granted in
-                if granted {
-                    self?.setupCamera(position: .back)
-                }
+                guard granted, let self else { return }
+                self.setupCamera(position: self.cameraPosition)
             }
         }
     }

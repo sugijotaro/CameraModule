@@ -8,7 +8,7 @@
 
 - **SwiftUI Native**: Seamlessly integrates with SwiftUI.
 - **Photo Capture**: Supports high-resolution photo capture.
-- **Camera Switching**: Easily switch between front and back cameras.
+- **Camera Switching**: Easily switch between front and back cameras, and choose which one starts active.
 - **Smooth Zoom**: Intuitive pinch-to-zoom functionality.
 - **Wide-Angle Support**: Supports switching to the wide-angle lens on devices with dual or triple cameras.
 - **Flexible Customization**: Use `CameraViewModel` and `CameraPreview` directly to build your own custom camera UI.
@@ -77,6 +77,18 @@ struct MyContentView: View {
 }
 ```
 
+#### Choosing the initial camera
+
+By default the camera starts on the back-facing lens. Pass `initialCameraPosition` to start on the front camera (e.g. for a selfie-first experience):
+
+```swift
+CameraView(initialCameraPosition: .front) { image in
+    self.capturedImage = image
+}
+```
+
+The user can still toggle to the other camera with the built-in switch button.
+
 ### 3. Custom UI Usage
 
 For more flexibility and a custom UI, you can use `CameraViewModel` and `CameraPreview` directly. This allows you to design your own layout for the preview and controls.
@@ -88,7 +100,8 @@ import SwiftUI
 import CameraModule
 
 struct CustomCameraView: View {
-    // Instantiate and use the ViewModel directly
+    // Instantiate and use the ViewModel directly.
+    // Pass `initialCameraPosition: .front` here to launch with the front camera.
     @StateObject private var viewModel = CameraViewModel()
     
     // Callback for when an image is captured
