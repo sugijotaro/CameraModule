@@ -6,6 +6,7 @@
 //
 
 @preconcurrency import AVFoundation
+import AVKit
 import UIKit
 
 public enum CameraMode {
@@ -52,6 +53,7 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     @Published public private(set) var isProcessingCapture: Bool = false
     @Published public private(set) var isProcessingVideo: Bool = false
     @Published public private(set) var isSessionRunning: Bool = false
+    @Published public var isVolumeButtonShutterEnabled: Bool
 
     var previewView: UIView
     let cameraMode: CameraMode
@@ -75,12 +77,14 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
         cameraMode: CameraMode = .photoOnly,
         sessionPreset: AVCaptureSession.Preset = .photo,
         videoResolution: VideoResolution? = nil,
-        initialCameraPosition: AVCaptureDevice.Position = .back
+        initialCameraPosition: AVCaptureDevice.Position = .back,
+        isVolumeButtonShutterEnabled: Bool = false
     ) {
         self.previewView = UIView()
         self.cameraMode = cameraMode
         self.sessionPreset = sessionPreset
         self.videoResolution = videoResolution
+        self.isVolumeButtonShutterEnabled = isVolumeButtonShutterEnabled
         // .unspecified が渡された場合は .back にフォールバック。デバイス未発見時の
         // 既存フォールバック (setupCamera(position:) 内) と挙動を揃える。
         self.cameraPosition = (initialCameraPosition == .unspecified) ? .back : initialCameraPosition
@@ -452,6 +456,22 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
             session.stopRunning()
             DispatchQueue.main.async {
                 self.isSessionRunning = false
+            }
+        }
+    }
+
+    @available(iOS 17.2, *)
+    public func handleHardwareButtonEvent(phase: AVCaptureEventInteraction.Phase) {
+        guard isVolumeButtonShutterEnabled else { return }
+        if phase == .ended {
+            if captureMode == .photo && (cameraMode == .photoOnly || cameraMode == .photoAndVideo || cameraMode == .seamless && !isRecording) {
+                capturePhoto()
+            } else {
+                if isRecording {
+                    stopRecording()
+                } else {
+                    startRecording()
+                }
             }
         }
     }

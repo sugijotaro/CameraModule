@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AVFoundation
+import AVKit
 
 public struct CameraView: View {
     @StateObject private var viewModel: CameraViewModel
@@ -21,6 +22,7 @@ public struct CameraView: View {
         sessionPreset: AVCaptureSession.Preset = .photo,
         videoResolution: VideoResolution? = nil,
         initialCameraPosition: AVCaptureDevice.Position = .back,
+        isVolumeButtonShutterEnabled: Bool = false,
         onImageCaptured: @escaping (UIImage) -> Void,
         onVideoCaptured: ((URL) -> Void)? = nil
     ) {
@@ -28,7 +30,8 @@ public struct CameraView: View {
             cameraMode: cameraMode,
             sessionPreset: sessionPreset,
             videoResolution: videoResolution,
-            initialCameraPosition: initialCameraPosition
+            initialCameraPosition: initialCameraPosition,
+            isVolumeButtonShutterEnabled: isVolumeButtonShutterEnabled
         ))
         self.onImageCaptured = onImageCaptured
         self.onVideoCaptured = onVideoCaptured
@@ -144,5 +147,37 @@ public struct CameraView: View {
                 onVideoCaptured?(url)
             }
         }
+        .captureEventInteraction(viewModel: viewModel)
+    }
+}
+
+@available(iOS 17.2, *)
+private struct CaptureEventInteractionHost: UIViewRepresentable {
+    let handler: (AVCaptureEventInteraction.Phase) -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        let interaction = AVCaptureEventInteraction { event in
+            handler(event.phase)
+        }
+        view.addInteraction(interaction)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+}
+
+extension View {
+    public func captureEventInteraction(viewModel: CameraViewModel) -> some View {
+        self.background(
+            Group {
+                if #available(iOS 17.2, *) {
+                    CaptureEventInteractionHost { phase in
+                        viewModel.handleHardwareButtonEvent(phase: phase)
+                    }
+                }
+            }
+        )
     }
 }
