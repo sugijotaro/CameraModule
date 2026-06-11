@@ -461,17 +461,15 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
 
     @available(iOS 17.2, *)
-    public func handleHardwareButtonEvent(phase: AVCaptureEventInteraction.Phase) {
-        guard isVolumeButtonShutterEnabled else { return }
-        if phase == .ended {
-            if captureMode == .photo && (cameraMode == .photoOnly || cameraMode == .photoAndVideo || cameraMode == .seamless && !isRecording) {
-                capturePhoto()
+    public func handleHardwareButtonEvent(_ event: AVCaptureEvent) {
+        guard isVolumeButtonShutterEnabled, event.phase == .ended else { return }
+        if captureMode == .photo && (cameraMode == .photoOnly || cameraMode == .photoAndVideo || (cameraMode == .seamless && !isRecording)) {
+            capturePhoto()
+        } else {
+            if isRecording {
+                stopRecording()
             } else {
-                if isRecording {
-                    stopRecording()
-                } else {
-                    startRecording()
-                }
+                startRecording()
             }
         }
     }

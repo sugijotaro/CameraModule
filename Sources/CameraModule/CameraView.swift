@@ -153,13 +153,13 @@ public struct CameraView: View {
 
 @available(iOS 17.2, *)
 private struct CaptureEventInteractionHost: UIViewRepresentable {
-    let handler: (AVCaptureEventInteraction.Phase) -> Void
+    let handler: (AVCaptureEvent) -> Void
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
         view.backgroundColor = .clear
         let interaction = AVCaptureEventInteraction { event in
-            handler(event.phase)
+            handler(event)
         }
         view.addInteraction(interaction)
         return view
@@ -173,8 +173,8 @@ extension View {
         self.background(
             Group {
                 if #available(iOS 17.2, *) {
-                    CaptureEventInteractionHost { phase in
-                        viewModel.handleHardwareButtonEvent(phase: phase)
+                    CaptureEventInteractionHost { event in
+                        viewModel.handleHardwareButtonEvent(event)
                     }
                 }
             }
