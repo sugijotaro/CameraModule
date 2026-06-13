@@ -92,11 +92,9 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     }
 
     public func setupCamera() {
-        Task {
-            checkCameraPermission { [weak self] granted in
-                guard granted, let self else { return }
-                self.setupCamera(position: self.cameraPosition)
-            }
+        checkCameraPermission { [weak self] granted in
+            guard granted, let self else { return }
+            self.setupCamera(position: self.cameraPosition)
         }
     }
 
@@ -148,7 +146,6 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
     private func setupCamera(position: AVCaptureDevice.Position) {
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
-
             let session = self.session ?? AVCaptureSession()
 
             if let existingSession = self.session {
@@ -184,10 +181,13 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 self.wideAngleZoomFactor = 2.0
             }
 
+            // beginConfiguration/commitConfiguration でフォーマット交渉を1回にまとめる。
+            // 個別に addInput/addOutput すると毎回フォーマット再交渉が走り数秒単位の遅延が生じる。
+            session.beginConfiguration()
+
             if session.canSetSessionPreset(self.sessionPreset) {
                 session.sessionPreset = self.sessionPreset
             } else {
-                // Fallback to photo preset if the specified preset is not supported
                 session.sessionPreset = .photo
             }
 
@@ -195,12 +195,9 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 session.addInput(deviceInput)
             }
 
-            // Apply custom video resolution if specified
             if let videoResolution = self.videoResolution, videoResolution.sessionPreset == nil {
                 self.applyCustomVideoResolution(videoResolution, to: device)
             }
-
-            // Audio input will be added when needed for video recording
 
             let photoOutput = self.photoOutput ?? AVCapturePhotoOutput()
             if session.canAddOutput(photoOutput) {
@@ -224,6 +221,8 @@ public class CameraViewModel: NSObject, ObservableObject, @unchecked Sendable {
                 }
                 self.movieOutput = movieOutput
             }
+
+            session.commitConfiguration()
 
             self.setInitialZoom()
 
